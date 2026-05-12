@@ -448,35 +448,41 @@ function App() {
           )}
           {visibleMessages.map((item) => (
             <article key={item.id} className={`message ${item.role}`}>
-              <div className="message-meta">
-                <span>{messageLabel(item)}</span>
-                {item.model && <small>{item.model}</small>}
-                {item.role === "user" && !activeBusy && (
-                  <button className="text-button" onClick={() => setEditing({ id: item.id, content: item.content })}>
-                    Edit
-                  </button>
-                )}
-              </div>
-              {editing?.id === item.id ? (
-                <form
-                  className="edit-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void editUserMessage(item.id, editing.content);
-                  }}
-                >
-                  <textarea value={editing.content} onChange={(event) => setEditing({ id: item.id, content: event.target.value })} />
-                  <div className="composer-actions">
-                    <button type="button" className="secondary-button" onClick={() => setEditing(null)}>
-                      Cancel
-                    </button>
-                    <button>Save & rerun</button>
-                  </div>
-                </form>
+              {item.role === "tool" ? (
+                <ToolMessage item={item} />
               ) : (
-                <div className="message-body markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
-                </div>
+                <>
+                  <div className="message-meta">
+                    <span>{messageLabel(item)}</span>
+                    {item.model && <small>{item.model}</small>}
+                    {item.role === "user" && !activeBusy && (
+                      <button className="text-button" onClick={() => setEditing({ id: item.id, content: item.content })}>
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  {editing?.id === item.id ? (
+                    <form
+                      className="edit-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void editUserMessage(item.id, editing.content);
+                      }}
+                    >
+                      <textarea value={editing.content} onChange={(event) => setEditing({ id: item.id, content: event.target.value })} />
+                      <div className="composer-actions">
+                        <button type="button" className="secondary-button" onClick={() => setEditing(null)}>
+                          Cancel
+                        </button>
+                        <button>Save & rerun</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="message-body markdown-body">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                    </div>
+                  )}
+                </>
               )}
             </article>
           ))}
@@ -526,6 +532,33 @@ function messageLabel(item: SessionMessage) {
   if (item.role === "tool") return item.toolName ? `Tool · ${item.toolName}` : "Tool";
   if (item.role === "system") return "System";
   return "You";
+}
+
+function ToolMessage({ item }: { item: SessionMessage }) {
+  const summary = toolSummary(item);
+  return (
+    <details className="tool-card">
+      <summary>
+        <span className="tool-summary-main">
+          <span className={summary.kind === "Result" ? "tool-chip result" : "tool-chip"}>{summary.kind}</span>
+          <strong>{summary.name}</strong>
+        </span>
+        <span className="tool-summary-action">Details</span>
+      </summary>
+      <div className="message-body markdown-body tool-details">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+      </div>
+    </details>
+  );
+}
+
+function toolSummary(item: SessionMessage) {
+  const isResult = item.content.startsWith("Result from");
+  const name = item.toolName || item.content.match(/`([^`]+)`/)?.[1] || "workspace tool";
+  return {
+    kind: isResult ? "Result" : "Call",
+    name
+  };
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

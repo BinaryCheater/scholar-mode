@@ -323,10 +323,7 @@ textarea {
 }
 
 .message.tool {
-  border: 1px solid #e5e5e5;
-  border-radius: 12px;
-  background: #fafafa;
-  padding: 12px 14px;
+  padding: 0;
 }
 
 .message.system {
@@ -352,6 +349,87 @@ textarea {
 
 .message-body {
   line-height: 1.58;
+}
+
+.tool-card {
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fafafa;
+  color: #30343a;
+  overflow: hidden;
+}
+
+.tool-card summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.tool-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-card summary::before {
+  content: "›";
+  color: #697077;
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.tool-card[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.tool-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tool-summary-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.tool-chip {
+  border-radius: 999px;
+  background: #ececf1;
+  color: #353740;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.tool-chip.result {
+  background: #e6f4ea;
+  color: #1e7d36;
+}
+
+.tool-summary-action {
+  color: #697077;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tool-card[open] .tool-summary-action {
+  color: #10a37f;
+}
+
+.tool-details {
+  border-top: 1px solid #e5e5e5;
+  padding: 12px 14px;
+  background: #fff;
 }
 
 .markdown-body p,
