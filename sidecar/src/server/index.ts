@@ -21,6 +21,7 @@ app.get("/api/config", (_req, res) => {
   res.json({
     workspaceRoot: config.workspaceRoot,
     defaultModel: config.defaultModel,
+    openaiBaseURL: config.openaiBaseURL || null,
     hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY)
   });
 });
@@ -137,6 +138,7 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
 
     await streamOpenAIReview({
       apiKey,
+      baseURL: config.openaiBaseURL,
       apiMode,
       model,
       contextPacket,

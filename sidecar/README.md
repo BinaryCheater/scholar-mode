@@ -15,6 +15,7 @@ Open `http://localhost:4317`.
 Useful environment variables:
 
 - `OPENAI_API_KEY`: required for model calls.
+- `OPENAI_BASE_URL`: optional OpenAI-compatible endpoint, for example `https://api.deepseek.com`.
 - `SIDECAR_WORKSPACE_ROOT`: file-read root. Defaults to the parent of `sidecar`.
 - `SIDECAR_DEFAULT_MODEL`: defaults to `gpt-5.5`.
 - `PORT`: defaults to `4317`.

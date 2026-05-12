@@ -3,6 +3,7 @@ import type { ApiMode } from "./types.js";
 
 interface StreamInput {
   apiKey: string;
+  baseURL?: string;
   apiMode: ApiMode;
   model: string;
   contextPacket: string;
@@ -10,7 +11,7 @@ interface StreamInput {
 }
 
 export async function streamOpenAIReview(input: StreamInput) {
-  const client = new OpenAI({ apiKey: input.apiKey });
+  const client = new OpenAI({ apiKey: input.apiKey, baseURL: input.baseURL });
 
   if (input.apiMode === "chat") {
     const stream = await client.chat.completions.create({

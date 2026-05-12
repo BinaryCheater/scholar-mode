@@ -48,6 +48,7 @@ interface SessionSummary {
 interface AppConfig {
   workspaceRoot: string;
   defaultModel: string;
+  openaiBaseURL: string | null;
   hasOpenAIKey: boolean;
 }
 
@@ -235,6 +236,7 @@ function App() {
           <div>
             <h1>Thinking Sidecar</h1>
             <p>{config?.workspaceRoot || "Loading workspace..."}</p>
+            {config?.openaiBaseURL && <p>{config.openaiBaseURL}</p>}
           </div>
           <button className="icon-button" onClick={createSession} title="New session">
             +
