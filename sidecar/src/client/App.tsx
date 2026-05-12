@@ -1,5 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import "./styles.css";
 
 type ApiMode = "responses" | "chat";
@@ -58,9 +60,9 @@ function App() {
   const [active, setActive] = useState<SidecarSession | null>(null);
   const [message, setMessage] = useState("");
   const [filePath, setFilePath] = useState("");
-  const [streamingText, setStreamingText] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [streams, setStreams] = useState<Record<string, { text: string; busy: boolean }>>({});
   const [error, setError] = useState("");
+  const abortControllers = useRef<Record<string, AbortController>>({});
 
   useEffect(() => {
     void boot();
@@ -94,7 +96,6 @@ function App() {
 
   async function loadSession(id: string) {
     setError("");
-    setStreamingText("");
     setActive(await api<SidecarSession>(`/api/sessions/${id}`));
   }
 
@@ -136,17 +137,22 @@ function App() {
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
-    if (!active || !message.trim() || busy) return;
-    setBusy(true);
-    setError("");
-    setStreamingText("");
+    if (!message.trim()) return;
+    await startStream(message.trim());
+  }
 
-    const pending = message.trim();
+  async function startStream(pending: string) {
+    if (!active || !pending || streams[active.id]?.busy) return;
+    setError("");
+
+    const session = active;
+    const sessionId = session.id;
     setMessage("");
+    setStreams((current) => ({ ...current, [sessionId]: { text: "", busy: true } }));
     setActive({
-      ...active,
+      ...session,
       messages: [
-        ...active.messages,
+        ...session.messages,
         {
           id: `local-${Date.now()}`,
           role: "user",
@@ -157,16 +163,21 @@ function App() {
       ]
     });
 
+    const controller = new AbortController();
+    abortControllers.current[sessionId] = controller;
+    let aborted = false;
+
     try {
-      const response = await fetch(`/api/sessions/${active.id}/stream`, {
+      const response = await fetch(`/api/sessions/${sessionId}/stream`, {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: pending,
-          model: active.model,
-          apiMode: active.apiMode,
-          manualContext: active.manualContext,
-          reviewPrompt: active.reviewPrompt
+          model: session.model,
+          apiMode: session.apiMode,
+          manualContext: session.manualContext,
+          reviewPrompt: session.reviewPrompt
         })
       });
 
@@ -191,7 +202,7 @@ function App() {
           const payload = JSON.parse(chunk.slice(6));
           if (payload.type === "delta") {
             assembled += payload.delta;
-            setStreamingText(assembled);
+            setStreams((current) => ({ ...current, [sessionId]: { text: assembled, busy: true } }));
           }
           if (payload.type === "error") {
             throw new Error(payload.error);
@@ -199,26 +210,55 @@ function App() {
         }
       }
 
-      setStreamingText("");
-      await loadSession(active.id);
+      setStreams((current) => ({ ...current, [sessionId]: { text: "", busy: false } }));
+      const next = await api<SidecarSession>(`/api/sessions/${sessionId}`);
+      setActive((current) => (current?.id === sessionId ? next : current));
       await refreshSessions();
     } catch (err) {
-      setError(errorText(err));
+      if ((err as Error).name !== "AbortError") {
+        setError(errorText(err));
+      } else {
+        aborted = true;
+        setStreams((current) => ({ ...current, [sessionId]: { text: "", busy: false } }));
+      }
     } finally {
-      setBusy(false);
+      delete abortControllers.current[sessionId];
+      if (!aborted) {
+        setStreams((current) => ({ ...current, [sessionId]: { text: current[sessionId]?.text || "", busy: false } }));
+      }
+    }
+  }
+
+  async function stopStreaming() {
+    if (!active) return;
+    abortControllers.current[active.id]?.abort();
+    setStreams((current) => ({ ...current, [active.id]: { text: "", busy: false } }));
+    const next = await api<SidecarSession>(`/api/sessions/${active.id}`).catch(() => null);
+    if (next) {
+      setActive(next);
+      await refreshSessions();
+    }
+  }
+
+  async function rerunLastUserMessage() {
+    if (!active || streams[active.id]?.busy) return;
+    const lastUser = [...active.messages].reverse().find((item) => item.role === "user");
+    if (lastUser) {
+      await startStream(lastUser.content);
     }
   }
 
   const visibleMessages = useMemo(() => {
     if (!active) return [];
     const base = active.messages;
-    if (streamingText) {
+    const activeStream = streams[active.id];
+    if (activeStream?.text) {
       return [
         ...base,
         {
           id: "streaming",
           role: "assistant" as const,
-          content: streamingText,
+          content: activeStream.text,
           createdAt: new Date().toISOString(),
           source: "model" as const,
           model: active.model,
@@ -227,7 +267,9 @@ function App() {
       ];
     }
     return base;
-  }, [active, streamingText]);
+  }, [active, streams]);
+
+  const activeBusy = Boolean(active && streams[active.id]?.busy);
 
   return (
     <main className="app-shell">
@@ -252,7 +294,7 @@ function App() {
             >
               <span>{session.title}</span>
               <small>
-                {session.messageCount} messages · {session.fileCount} files
+                {session.messageCount} messages · {session.fileCount} files{streams[session.id]?.busy ? " · thinking" : ""}
               </small>
             </button>
           ))}
@@ -349,14 +391,27 @@ function App() {
                 <span>{item.role === "assistant" ? "Sidecar" : "You"}</span>
                 {item.model && <small>{item.model}</small>}
               </div>
-              <div className="message-body">{item.content}</div>
+              <div className="message-body markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+              </div>
             </article>
           ))}
         </div>
 
         <form className="composer" onSubmit={sendMessage}>
           <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask for an independent review, rival hypotheses, weak links, or the next evidence to gather." />
-          <button disabled={!message.trim() || busy}>{busy ? "Thinking..." : "Send"}</button>
+          <div className="composer-actions">
+            <button type="button" className="secondary-button" disabled={!active?.messages.some((item) => item.role === "user") || activeBusy} onClick={rerunLastUserMessage}>
+              Rerun
+            </button>
+            {activeBusy ? (
+              <button type="button" className="stop-button" onClick={stopStreaming}>
+                Stop
+              </button>
+            ) : (
+              <button disabled={!message.trim()}>Send</button>
+            )}
+          </div>
         </form>
       </section>
     </main>

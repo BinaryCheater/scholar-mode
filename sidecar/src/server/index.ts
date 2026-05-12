@@ -95,6 +95,14 @@ app.delete("/api/sessions/:id/files/:fileId", async (req, res, next) => {
 });
 
 app.post("/api/sessions/:id/stream", async (req, res, next) => {
+  const abortController = new AbortController();
+  req.on("aborted", () => abortController.abort());
+  res.on("close", () => {
+    if (!res.writableEnded) {
+      abortController.abort();
+    }
+  });
+
   try {
     const session = await store.getSession(req.params.id);
     if (!session) {
@@ -133,6 +141,7 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
       reviewPrompt,
       manualContext,
       files: session.files,
+      history: session.messages,
       userMessage
     });
 
@@ -142,19 +151,22 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
       apiMode,
       model,
       contextPacket,
+      signal: abortController.signal,
       onDelta(delta) {
         assistantContent += delta;
         res.write(`data: ${JSON.stringify({ type: "delta", delta })}\n\n`);
       }
     });
 
-    await store.addMessage(session.id, {
-      role: "assistant",
-      content: assistantContent,
-      source: "model",
-      model,
-      apiMode
-    });
+    if (assistantContent.trim()) {
+      await store.addMessage(session.id, {
+        role: "assistant",
+        content: assistantContent,
+        source: "model",
+        model,
+        apiMode
+      });
+    }
     res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
     res.end();
   } catch (error) {
