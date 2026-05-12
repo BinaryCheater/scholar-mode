@@ -16,4 +16,18 @@ describe("workspace tools", () => {
     expect(list).toContain("notes/claim.md");
     expect(read).toContain("claim body");
   });
+
+  it("loads discovered skill instructions by name", async () => {
+    const root = join(process.cwd(), ".tmp-tests", crypto.randomUUID());
+    await mkdir(join(root, "skills", "research"), { recursive: true });
+    await writeFile(
+      join(root, "skills", "research", "SKILL.md"),
+      "---\nname: research-review\ndescription: Use for research critique.\n---\n# Research Review"
+    );
+
+    const tools = createWorkspaceTools(root);
+    const content = await tools.execute("load_skill", { name: "research-review" });
+
+    expect(content).toContain("# Research Review");
+  });
 });

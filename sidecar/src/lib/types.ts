@@ -55,3 +55,11 @@ export interface WorkspaceSkill {
   description: string;
   path: string;
 }
+
+export interface WorkspaceSkillTrigger {
+  skill: WorkspaceSkill;
+  score: number;
+  confidence: "high" | "medium";
+  reason: string;
+  disclosure: "loaded" | "candidate";
+}

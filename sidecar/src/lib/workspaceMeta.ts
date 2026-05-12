@@ -1,10 +1,30 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { readWorkspaceFile } from "./files.js";
-import type { FileSnapshot, WorkspaceSkill } from "./types.js";
+import type { FileSnapshot, WorkspaceSkill, WorkspaceSkillTrigger } from "./types.js";
 
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "dist-server", "data", ".tmp-tests"]);
 const INSTRUCTION_RE = /^(CLAUDE|AGENTS)\.md$/i;
+const STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "this",
+  "that",
+  "use",
+  "using",
+  "when",
+  "task",
+  "asks",
+  "user",
+  "mode",
+  "skill",
+  "review",
+  "analysis",
+  "context"
+]);
 
 export async function findInstructionFiles(workspaceRoot: string): Promise<FileSnapshot[]> {
   const files = await listFiles(workspaceRoot, 3);
@@ -32,15 +52,52 @@ export async function scanWorkspaceSkills(workspaceRoot: string): Promise<Worksp
 }
 
 export function selectTriggeredSkills(skills: WorkspaceSkill[], text: string) {
+  return selectSkillTriggers(skills, text).map((trigger) => trigger.skill);
+}
+
+export function selectSkillTriggers(skills: WorkspaceSkill[], text: string): WorkspaceSkillTrigger[] {
   const query = tokenize(text);
   const rawText = text.toLowerCase();
   if (!query.size && !rawText.trim()) return [];
   return skills
     .map((skill) => ({ skill, score: scoreSkill(skill, query, rawText) }))
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score >= 2)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
-    .map((item) => item.skill);
+    .map(({ skill, score }) => {
+      const confidence = score >= 3 ? "high" : "medium";
+      return {
+        skill,
+        score,
+        confidence,
+        reason: triggerReason(skill, score, text),
+        disclosure: confidence === "high" ? "loaded" : "candidate"
+      };
+    });
+}
+
+export async function loadTriggeredSkillFiles(workspaceRoot: string, triggers: WorkspaceSkillTrigger[]): Promise<FileSnapshot[]> {
+  const loaded = triggers.filter((trigger) => trigger.disclosure === "loaded").slice(0, 3);
+  return Promise.all(loaded.map((trigger) => readWorkspaceFile(workspaceRoot, trigger.skill.path)));
+}
+
+export async function loadSkillByReference(workspaceRoot: string, reference: string): Promise<FileSnapshot> {
+  const normalized = reference.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Skill name or path is required.");
+  }
+
+  const skills = await scanWorkspaceSkills(workspaceRoot);
+  const match = skills.find(
+    (skill) =>
+      skill.name.toLowerCase() === normalized ||
+      skill.path.toLowerCase() === normalized ||
+      skill.path.toLowerCase().endsWith(`/${normalized}`)
+  );
+  if (!match) {
+    throw new Error(`Skill not found: ${reference}`);
+  }
+  return readWorkspaceFile(workspaceRoot, match.path);
 }
 
 async function listFiles(root: string, maxDepth: number, dir = "", depth = 0): Promise<string[]> {
@@ -87,11 +144,26 @@ function scoreSkill(skill: WorkspaceSkill, query: Set<string>, rawText: string) 
   return score;
 }
 
+function triggerReason(skill: WorkspaceSkill, score: number, text: string) {
+  const rawText = text.toLowerCase();
+  const normalizedName = skill.name.toLowerCase();
+  const spacedName = normalizedName.replace(/[-_]+/g, " ");
+  if (rawText.includes(normalizedName) || rawText.includes(spacedName)) {
+    return `Prompt explicitly mentions ${skill.name}.`;
+  }
+  const query = tokenize(text);
+  const haystack = tokenize(`${skill.name} ${spacedName} ${skill.description}`);
+  const matches = [...query].filter((token) => haystack.has(token)).slice(0, 5);
+  return matches.length
+    ? `Matched skill description terms: ${matches.join(", ")}. Score ${score}.`
+    : `Matched skill routing score ${score}.`;
+}
+
 function tokenize(text: string) {
   return new Set(
     text
       .toLowerCase()
       .split(/[^a-z0-9_\-\u4e00-\u9fff]+/u)
-      .filter((token) => token.length > 2 || ["ai", "cv", "ml", "rl"].includes(token))
+      .filter((token) => (token.length > 2 || ["ai", "cv", "ml", "rl"].includes(token)) && !STOPWORDS.has(token))
   );
 }

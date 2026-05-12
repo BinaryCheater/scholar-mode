@@ -6,7 +6,7 @@ import { readWorkspaceFile } from "../lib/files.js";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/prompt.js";
 import { streamOpenAIReview } from "../lib/openaiProvider.js";
 import { JsonSessionStore } from "../lib/store.js";
-import { findInstructionFiles, scanWorkspaceSkills, selectTriggeredSkills } from "../lib/workspaceMeta.js";
+import { findInstructionFiles, loadTriggeredSkillFiles, scanWorkspaceSkills, selectSkillTriggers } from "../lib/workspaceMeta.js";
 import { loadConfig } from "./config.js";
 
 const config = loadConfig();
@@ -176,15 +176,29 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
     let assistantContent = "";
     const toolMessages: Array<{ name: string; content: string }> = [];
     const workspaceSkills = await scanWorkspaceSkills(config.workspaceRoot);
-    const triggeredSkills = selectTriggeredSkills(workspaceSkills, `${manualContext}\n${userMessage}`);
+    const skillTriggers = selectSkillTriggers(workspaceSkills, `${manualContext}\n${userMessage}`);
+    const loadedSkillFiles = await loadTriggeredSkillFiles(config.workspaceRoot, skillTriggers);
     const instructionFiles = req.body?.includeInstructionFiles ? await findInstructionFiles(config.workspaceRoot) : [];
-    if (triggeredSkills.length) {
+    if (skillTriggers.length) {
+      const skillTrace = skillTriggers
+        .map(
+          (trigger) =>
+            `- \`${trigger.skill.name}\` - ${trigger.confidence}; ${trigger.disclosure}; ${trigger.reason}`
+        )
+        .join("\n");
       await store.addMessage(session.id, {
         role: "system",
-        content: `Triggered workspace skills:\n\n${triggeredSkills.map((skill) => `- \`${skill.name}\` - ${skill.description || skill.path}`).join("\n")}`,
+        content: `Workspace skill routing:\n\n${skillTrace}`,
         source: "system"
       });
-      res.write(`data: ${JSON.stringify({ type: "skills", skills: triggeredSkills })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          type: "skills",
+          skills: skillTriggers.map((trigger) => trigger.skill),
+          triggers: skillTriggers,
+          loadedSkills: loadedSkillFiles.map(({ path, bytes }) => ({ path, bytes }))
+        })}\n\n`
+      );
     }
     const contextPacket = buildContextPacket({
       reviewPrompt,
@@ -192,7 +206,8 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
       files: session.files,
       instructionFiles,
       workspaceSkills,
-      triggeredSkills,
+      skillTriggers,
+      loadedSkillFiles,
       history,
       userMessage
     });

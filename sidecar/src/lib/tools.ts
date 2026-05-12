@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readWorkspaceFile, resolveWorkspacePath } from "./files.js";
+import { loadSkillByReference } from "./workspaceMeta.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -56,6 +57,22 @@ export function createWorkspaceTools(workspaceRoot: string) {
             additionalProperties: false
           }
         }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "load_skill",
+          description:
+            "Load the full SKILL.md instructions for a discovered workspace skill by exact skill name or workspace-relative SKILL.md path.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Exact skill name, such as scholar-mode." },
+              path: { type: "string", description: "Workspace-relative path to a SKILL.md file." }
+            },
+            additionalProperties: false
+          }
+        }
       }
     ],
     async execute(name: string, rawArgs: string | Record<string, unknown>) {
@@ -78,6 +95,11 @@ export function createWorkspaceTools(workspaceRoot: string) {
         const commandArgs = ["diff", "--", ...(path ? [path] : [])];
         const { stdout } = await execFileAsync("git", commandArgs, { cwd: workspaceRoot, maxBuffer: 1_000_000 });
         return stdout || "No git diff.";
+      }
+      if (name === "load_skill") {
+        const reference = typeof args.name === "string" && args.name.trim() ? args.name : args.path;
+        const snapshot = await loadSkillByReference(workspaceRoot, requireString(reference, "name or path"));
+        return snapshot.content;
       }
       throw new Error(`Unknown tool: ${name}`);
     }

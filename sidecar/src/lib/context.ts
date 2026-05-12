@@ -1,4 +1,4 @@
-import type { FileSnapshot, SessionMessage, WorkspaceSkill } from "./types.js";
+import type { FileSnapshot, SessionMessage, WorkspaceSkill, WorkspaceSkillTrigger } from "./types.js";
 
 interface ContextPacketInput {
   reviewPrompt: string;
@@ -6,7 +6,8 @@ interface ContextPacketInput {
   files: FileSnapshot[];
   instructionFiles: FileSnapshot[];
   workspaceSkills: WorkspaceSkill[];
-  triggeredSkills: WorkspaceSkill[];
+  skillTriggers: WorkspaceSkillTrigger[];
+  loadedSkillFiles: FileSnapshot[];
   history: SessionMessage[];
   userMessage: string;
 }
@@ -38,9 +39,18 @@ ${file.content}`
     ? input.workspaceSkills.map((skill) => `- ${skill.name}: ${skill.description} (${skill.path})`).join("\n")
     : "No workspace skills were discovered.";
 
-  const triggered = input.triggeredSkills.length
-    ? input.triggeredSkills.map((skill) => `- ${skill.name}: ${skill.description} (${skill.path})`).join("\n")
+  const triggered = input.skillTriggers.length
+    ? input.skillTriggers
+        .map(
+          (trigger) =>
+            `- ${trigger.skill.name}: ${trigger.confidence} confidence, ${trigger.disclosure}. ${trigger.reason} (${trigger.skill.path})`
+        )
+        .join("\n")
     : "No workspace skill appears directly triggered by this turn.";
+
+  const loadedSkills = input.loadedSkillFiles.length
+    ? input.loadedSkillFiles.map((file) => `### Loaded Skill: ${file.path}\n\n${file.content}`).join("\n\n---\n\n")
+    : "No full skill instructions were auto-loaded. If a candidate skill seems relevant, use the load_skill tool before relying on it.";
 
   return `${input.reviewPrompt}
 
@@ -57,6 +67,9 @@ ${skills}
 
 ### Triggered Skills For This Turn
 ${triggered}
+
+### Loaded Skill Instructions
+${loadedSkills}
 
 ### File Snapshots
 ${files}

@@ -62,6 +62,14 @@ interface WorkspaceSkill {
   path: string;
 }
 
+interface WorkspaceSkillTrigger {
+  skill: WorkspaceSkill;
+  score: number;
+  confidence: "high" | "medium";
+  reason: string;
+  disclosure: "loaded" | "candidate";
+}
+
 interface WorkspaceInfo {
   instructionFiles: Array<{ path: string; bytes: number }>;
   skills: WorkspaceSkill[];
@@ -212,7 +220,7 @@ function App() {
           if (payload.type === "skills") {
             appendLocalMessage(sessionId, {
               role: "system",
-              content: `Triggered workspace skills:\n\n${payload.skills.map((skill: WorkspaceSkill) => `- \`${skill.name}\` — ${skill.description || skill.path}`).join("\n")}`
+              content: skillRoutingMessage(payload)
             });
           }
           if (payload.type === "tool_result") {
@@ -559,6 +567,19 @@ function toolSummary(item: SessionMessage) {
     kind: isResult ? "Result" : "Call",
     name
   };
+}
+
+function skillRoutingMessage(payload: { triggers?: WorkspaceSkillTrigger[]; skills?: WorkspaceSkill[]; loadedSkills?: Array<{ path: string; bytes: number }> }) {
+  if (payload.triggers?.length) {
+    const loaded = new Set((payload.loadedSkills || []).map((skill) => skill.path));
+    return `Workspace skill routing:\n\n${payload.triggers
+      .map((trigger) => {
+        const state = loaded.has(trigger.skill.path) ? "loaded" : trigger.disclosure;
+        return `- \`${trigger.skill.name}\` — ${trigger.confidence}; ${state}; ${trigger.reason}`;
+      })
+      .join("\n")}`;
+  }
+  return `Triggered workspace skills:\n\n${(payload.skills || []).map((skill) => `- \`${skill.name}\` — ${skill.description || skill.path}`).join("\n")}`;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

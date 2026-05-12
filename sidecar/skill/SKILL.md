@@ -21,7 +21,9 @@ Use this skill to hand off explicit context from Codex to the local Thinking Sid
    `cd sidecar && npm run codex:session -- --title "Review" --context "..." --file SKILL.md`
 4. Tell the user the sidecar URL and session purpose.
 
-The web UI supports workspace tools when the auto-selected API route is Chat Completions. Keep tools enabled when the sidecar should be able to list files, read workspace-relative files, or inspect git diff itself. Use the CLI handoff files only for context that should remain stable and cache-friendly.
+The web UI supports workspace tools when the auto-selected API route is Chat Completions. Keep tools enabled when the sidecar should be able to list files, read workspace-relative files, inspect git diff, or load full workspace skill instructions itself. Use the CLI handoff files only for context that should remain stable and cache-friendly.
+
+Workspace skills are discovered from `SKILL.md` frontmatter first. Strong matches are loaded into the sidecar context automatically; weaker candidates remain visible and can be loaded with the `load_skill` tool.
 
 ## Context Discipline
 

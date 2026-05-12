@@ -54,7 +54,13 @@ When the auto-selected route is Chat Completions, enable workspace tools to let 
 
 All file paths are workspace-relative and constrained to `SIDECAR_WORKSPACE_ROOT`. Tool calls and tool results are shown in the chat and persisted in the session history before the final assistant answer.
 
-The UI also lists workspace skills discovered from `SKILL.md` files. When a turn appears to trigger a workspace skill, the triggered skill is inserted into the conversation flow before the answer.
+The UI also lists workspace skills discovered from `SKILL.md` files. Skill handling is progressive:
+
+- Discovery scans frontmatter only: `name`, `description`, and `path`.
+- Each turn matches the prompt and manual context against discovered skill metadata.
+- High-confidence matches auto-load the full `SKILL.md` into the context packet.
+- Medium-confidence matches are shown as candidates; the model can call `load_skill` to read the full instructions before relying on that skill.
+- The conversation flow records skill routing and tool use separately, so you can see what was discovered, triggered, loaded, and called.
 
 ## Codex Handoff
 

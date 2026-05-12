@@ -9,7 +9,8 @@ describe("context packet", () => {
       manualContext: "Codex summary here",
       instructionFiles: [],
       workspaceSkills: [],
-      triggeredSkills: [],
+      skillTriggers: [],
+      loadedSkillFiles: [],
       files: [
         {
           id: "file-1",
@@ -37,7 +38,8 @@ describe("context packet", () => {
       manualContext: "Stable project context",
       instructionFiles: [],
       workspaceSkills: [],
-      triggeredSkills: [],
+      skillTriggers: [],
+      loadedSkillFiles: [],
       files: [],
       history: [
         {
