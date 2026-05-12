@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sidecar Thinking"
+  short_description: "Hand off explicit Codex context to the local Thinking Sidecar"
+  default_prompt: "Use $sidecar-thinking to create an explicit context packet and open a local Thinking Sidecar review session."

@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-server
+data
+.tmp-tests
+.env
+
+tsconfig.tsbuildinfo
