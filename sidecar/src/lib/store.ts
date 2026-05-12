@@ -59,7 +59,8 @@ export class JsonSessionStore {
 
   async addMessage(
     sessionId: string,
-    input: Pick<SessionMessage, "role" | "content" | "source"> & Partial<Pick<SessionMessage, "model" | "apiMode">>
+    input: Pick<SessionMessage, "role" | "content" | "source"> &
+      Partial<Pick<SessionMessage, "model" | "apiMode" | "toolName" | "toolCallId">>
   ) {
     return this.mutateSession(sessionId, (session) => {
       session.messages.push({
@@ -67,6 +68,24 @@ export class JsonSessionStore {
         createdAt: new Date().toISOString(),
         ...input
       });
+    });
+  }
+
+  async replaceMessageAndTruncate(sessionId: string, messageId: string, content: string) {
+    return this.mutateSession(sessionId, (session) => {
+      const index = session.messages.findIndex((message) => message.id === messageId);
+      if (index < 0) {
+        throw new Error("Message not found.");
+      }
+      if (session.messages[index].role !== "user") {
+        throw new Error("Only user messages can be edited.");
+      }
+      session.messages[index] = {
+        ...session.messages[index],
+        content,
+        createdAt: new Date().toISOString()
+      };
+      session.messages = session.messages.slice(0, index + 1);
     });
   }
 

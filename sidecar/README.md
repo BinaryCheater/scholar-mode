@@ -42,6 +42,18 @@ Each request is self-contained. The server sends the review protocol, manual con
 
 The UI renders assistant messages as Markdown and keeps streaming state per session, so switching sessions during generation does not move partial output into the wrong chat. Use `Stop` to abort an in-flight answer. Edit the context or prompt, then use `Rerun` to answer the previous user request again with the updated context.
 
+User messages can also be edited in place. Saving an edit truncates the session after that user turn and regenerates from the edited point, matching the "rewind and answer again" interaction used by coding agents.
+
+## Workspace Tools
+
+In `chat` mode, enable workspace tools to let the model call a small OpenAI-compatible tool set:
+
+- `list_workspace_files`
+- `read_workspace_file`
+- `get_git_diff`
+
+All file paths are workspace-relative and constrained to `SIDECAR_WORKSPACE_ROOT`. Tool calls and tool results are shown in the chat and persisted in the session history before the final assistant answer.
+
 ## Codex Handoff
 
 With the sidecar server running:

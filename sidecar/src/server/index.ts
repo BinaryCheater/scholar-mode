@@ -75,6 +75,20 @@ app.patch("/api/sessions/:id", async (req, res, next) => {
   }
 });
 
+app.post("/api/sessions/:id/messages/:messageId/edit", async (req, res, next) => {
+  try {
+    const content = String(req.body?.content || "").trim();
+    if (!content) {
+      res.status(400).json({ error: "Content is required." });
+      return;
+    }
+    const session = await store.replaceMessageAndTruncate(req.params.id, req.params.messageId, content);
+    res.json(session);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/sessions/:id/files", async (req, res, next) => {
   try {
     const snapshot = await readWorkspaceFile(config.workspaceRoot, req.body?.path || "");
@@ -128,7 +142,18 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
     }
 
     await store.updateSession(session.id, { model, apiMode, manualContext, reviewPrompt });
-    await store.addMessage(session.id, { role: "user", content: userMessage, source: "manual" });
+    const existingMessageId = typeof req.body?.existingMessageId === "string" ? req.body.existingMessageId : null;
+    let history = session.messages;
+    if (existingMessageId) {
+      const existingIndex = session.messages.findIndex((message) => message.id === existingMessageId && message.role === "user");
+      if (existingIndex < 0) {
+        res.status(400).json({ error: "Existing user message not found." });
+        return;
+      }
+      history = session.messages.slice(0, existingIndex);
+    } else {
+      await store.addMessage(session.id, { role: "user", content: userMessage, source: "manual" });
+    }
 
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -137,11 +162,12 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
     });
 
     let assistantContent = "";
+    const toolMessages: Array<{ name: string; result: string }> = [];
     const contextPacket = buildContextPacket({
       reviewPrompt,
       manualContext,
       files: session.files,
-      history: session.messages,
+      history,
       userMessage
     });
 
@@ -151,12 +177,30 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
       apiMode,
       model,
       contextPacket,
+      workspaceRoot: config.workspaceRoot,
+      enableTools: Boolean(req.body?.enableTools) && apiMode === "chat",
       signal: abortController.signal,
+      onToolCall(name, args) {
+        res.write(`data: ${JSON.stringify({ type: "tool_call", name, args })}\n\n`);
+      },
+      onToolResult(name, result) {
+        toolMessages.push({ name, result });
+        res.write(`data: ${JSON.stringify({ type: "tool_result", name, result })}\n\n`);
+      },
       onDelta(delta) {
         assistantContent += delta;
         res.write(`data: ${JSON.stringify({ type: "delta", delta })}\n\n`);
       }
     });
+
+    for (const toolMessage of toolMessages) {
+      await store.addMessage(session.id, {
+        role: "tool",
+        content: toolMessage.result,
+        source: "model",
+        toolName: toolMessage.name
+      });
+    }
 
     if (assistantContent.trim()) {
       await store.addMessage(session.id, {

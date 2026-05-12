@@ -21,6 +21,8 @@ Use this skill to hand off explicit context from Codex to the local Thinking Sid
    `cd sidecar && npm run codex:session -- --title "Review" --context "..." --file SKILL.md`
 4. Tell the user the sidecar URL and session purpose.
 
+The web UI supports workspace tools in `chat` mode. Keep tools enabled when the sidecar should be able to list files, read workspace-relative files, or inspect git diff itself. Use explicit file attachments for context that should remain stable and cache-friendly.
+
 ## Context Discipline
 
 Prefer smaller, auditable packets over broad repository dumps. Attach only files that matter. If the sidecar needs more context, ask Codex for specific missing files or summaries.

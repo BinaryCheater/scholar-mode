@@ -1,6 +1,6 @@
 export type ApiMode = "responses" | "chat";
 
-export type MessageRole = "user" | "assistant" | "system";
+export type MessageRole = "user" | "assistant" | "system" | "tool";
 
 export interface FileSnapshot {
   id: string;
@@ -18,6 +18,8 @@ export interface SessionMessage {
   source: "manual" | "model" | "system";
   model?: string;
   apiMode?: ApiMode;
+  toolName?: string;
+  toolCallId?: string;
 }
 
 export interface SidecarSession {

@@ -16,12 +16,13 @@ interface FileSnapshot {
 
 interface SessionMessage {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "tool";
   content: string;
   createdAt: string;
   source: "manual" | "model" | "system";
   model?: string;
   apiMode?: ApiMode;
+  toolName?: string;
 }
 
 interface SidecarSession {
@@ -61,6 +62,8 @@ function App() {
   const [message, setMessage] = useState("");
   const [filePath, setFilePath] = useState("");
   const [streams, setStreams] = useState<Record<string, { text: string; busy: boolean }>>({});
+  const [enableTools, setEnableTools] = useState(true);
+  const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
   const [error, setError] = useState("");
   const abortControllers = useRef<Record<string, AbortController>>({});
 
@@ -138,30 +141,34 @@ function App() {
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     if (!message.trim()) return;
-    await startStream(message.trim());
+    if (!active) return;
+    await startStream(active, message.trim(), { appendUser: true });
   }
 
-  async function startStream(pending: string) {
-    if (!active || !pending || streams[active.id]?.busy) return;
+  async function startStream(session: SidecarSession, pending: string, options: { appendUser: boolean; existingMessageId?: string }) {
+    if (!pending || streams[session.id]?.busy) return;
     setError("");
 
-    const session = active;
     const sessionId = session.id;
     setMessage("");
     setStreams((current) => ({ ...current, [sessionId]: { text: "", busy: true } }));
-    setActive({
-      ...session,
-      messages: [
-        ...session.messages,
-        {
-          id: `local-${Date.now()}`,
-          role: "user",
-          content: pending,
-          createdAt: new Date().toISOString(),
-          source: "manual"
-        }
-      ]
-    });
+    if (options.appendUser) {
+      setActive({
+        ...session,
+        messages: [
+          ...session.messages,
+          {
+            id: `local-${Date.now()}`,
+            role: "user",
+            content: pending,
+            createdAt: new Date().toISOString(),
+            source: "manual"
+          }
+        ]
+      });
+    } else {
+      setActive(session);
+    }
 
     const controller = new AbortController();
     abortControllers.current[sessionId] = controller;
@@ -177,7 +184,9 @@ function App() {
           model: session.model,
           apiMode: session.apiMode,
           manualContext: session.manualContext,
-          reviewPrompt: session.reviewPrompt
+          reviewPrompt: session.reviewPrompt,
+          enableTools,
+          existingMessageId: options.existingMessageId
         })
       });
 
@@ -203,6 +212,20 @@ function App() {
           if (payload.type === "delta") {
             assembled += payload.delta;
             setStreams((current) => ({ ...current, [sessionId]: { text: assembled, busy: true } }));
+          }
+          if (payload.type === "tool_call") {
+            appendLocalMessage(sessionId, {
+              role: "tool",
+              content: `Calling \`${payload.name}\` with:\n\n\`\`\`json\n${payload.args}\n\`\`\``,
+              toolName: payload.name
+            });
+          }
+          if (payload.type === "tool_result") {
+            appendLocalMessage(sessionId, {
+              role: "tool",
+              content: `Result from \`${payload.name}\`:\n\n\`\`\`\n${String(payload.result).slice(0, 4000)}\n\`\`\``,
+              toolName: payload.name
+            });
           }
           if (payload.type === "error") {
             throw new Error(payload.error);
@@ -244,8 +267,38 @@ function App() {
     if (!active || streams[active.id]?.busy) return;
     const lastUser = [...active.messages].reverse().find((item) => item.role === "user");
     if (lastUser) {
-      await startStream(lastUser.content);
+      await editUserMessage(lastUser.id, lastUser.content);
     }
+  }
+
+  async function editUserMessage(messageId: string, content: string) {
+    if (!active || streams[active.id]?.busy || !content.trim()) return;
+    const next = await api<SidecarSession>(`/api/sessions/${active.id}/messages/${messageId}/edit`, {
+      method: "POST",
+      body: JSON.stringify({ content: content.trim() })
+    });
+    setActive(next);
+    setEditing(null);
+    await refreshSessions();
+    await startStream(next, content.trim(), { appendUser: false, existingMessageId: messageId });
+  }
+
+  function appendLocalMessage(sessionId: string, input: Pick<SessionMessage, "role" | "content"> & Partial<SessionMessage>) {
+    setActive((current) => {
+      if (current?.id !== sessionId) return current;
+      return {
+        ...current,
+        messages: [
+          ...current.messages,
+          {
+            id: `local-tool-${Date.now()}-${Math.random()}`,
+            createdAt: new Date().toISOString(),
+            source: "model",
+            ...input
+          }
+        ]
+      };
+    });
   }
 
   const visibleMessages = useMemo(() => {
@@ -321,6 +374,11 @@ function App() {
               </label>
             </div>
 
+            <label className="checkbox-label">
+              <input type="checkbox" checked={enableTools} onChange={(event) => setEnableTools(event.target.checked)} disabled={active.apiMode !== "chat"} />
+              Enable workspace tools
+            </label>
+
             <label>
               Codex/context packet notes
               <textarea
@@ -388,12 +446,35 @@ function App() {
           {visibleMessages.map((item) => (
             <article key={item.id} className={`message ${item.role}`}>
               <div className="message-meta">
-                <span>{item.role === "assistant" ? "Sidecar" : "You"}</span>
+                <span>{messageLabel(item)}</span>
                 {item.model && <small>{item.model}</small>}
+                {item.role === "user" && !activeBusy && (
+                  <button className="text-button" onClick={() => setEditing({ id: item.id, content: item.content })}>
+                    Edit
+                  </button>
+                )}
               </div>
-              <div className="message-body markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
-              </div>
+              {editing?.id === item.id ? (
+                <form
+                  className="edit-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void editUserMessage(item.id, editing.content);
+                  }}
+                >
+                  <textarea value={editing.content} onChange={(event) => setEditing({ id: item.id, content: event.target.value })} />
+                  <div className="composer-actions">
+                    <button type="button" className="secondary-button" onClick={() => setEditing(null)}>
+                      Cancel
+                    </button>
+                    <button>Save & rerun</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="message-body markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -435,6 +516,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error.";
+}
+
+function messageLabel(item: SessionMessage) {
+  if (item.role === "assistant") return "Sidecar";
+  if (item.role === "tool") return item.toolName ? `Tool · ${item.toolName}` : "Tool";
+  return "You";
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
