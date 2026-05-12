@@ -6,7 +6,7 @@ import { readWorkspaceFile } from "../lib/files.js";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/prompt.js";
 import { streamOpenAIReview } from "../lib/openaiProvider.js";
 import { JsonSessionStore } from "../lib/store.js";
-import type { ApiMode } from "../lib/types.js";
+import { findInstructionFiles, scanWorkspaceSkills, selectTriggeredSkills } from "../lib/workspaceMeta.js";
 import { loadConfig } from "./config.js";
 
 const config = loadConfig();
@@ -22,8 +22,20 @@ app.get("/api/config", (_req, res) => {
     workspaceRoot: config.workspaceRoot,
     defaultModel: config.defaultModel,
     openaiBaseURL: config.openaiBaseURL || null,
+    apiMode: config.apiMode,
     hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY)
   });
+});
+
+app.get("/api/workspace", async (_req, res, next) => {
+  try {
+    res.json({
+      instructionFiles: (await findInstructionFiles(config.workspaceRoot)).map(({ path, bytes }) => ({ path, bytes })),
+      skills: await scanWorkspaceSkills(config.workspaceRoot)
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/api/sessions", async (_req, res, next) => {
@@ -39,7 +51,7 @@ app.post("/api/sessions", async (req, res, next) => {
     const session = await store.createSession({
       title: req.body?.title,
       model: req.body?.model || config.defaultModel,
-      apiMode: req.body?.apiMode || "responses"
+      apiMode: config.apiMode
     });
     res.status(201).json(session);
   } catch (error) {
@@ -67,7 +79,7 @@ app.patch("/api/sessions/:id", async (req, res, next) => {
       manualContext: req.body?.manualContext,
       reviewPrompt: req.body?.reviewPrompt || DEFAULT_REVIEW_PROMPT,
       model: req.body?.model,
-      apiMode: req.body?.apiMode
+      apiMode: config.apiMode
     });
     res.json(session);
   } catch (error) {
@@ -131,7 +143,7 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
     }
 
     const model = String(req.body?.model || session.model || config.defaultModel);
-    const apiMode = normalizeApiMode(req.body?.apiMode || session.apiMode);
+    const apiMode = config.apiMode;
     const manualContext = String(req.body?.manualContext ?? session.manualContext);
     const reviewPrompt = String(req.body?.reviewPrompt || session.reviewPrompt || DEFAULT_REVIEW_PROMPT);
     const apiKey = process.env.OPENAI_API_KEY;
@@ -162,11 +174,25 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
     });
 
     let assistantContent = "";
-    const toolMessages: Array<{ name: string; result: string }> = [];
+    const toolMessages: Array<{ name: string; content: string }> = [];
+    const workspaceSkills = await scanWorkspaceSkills(config.workspaceRoot);
+    const triggeredSkills = selectTriggeredSkills(workspaceSkills, `${manualContext}\n${userMessage}`);
+    const instructionFiles = req.body?.includeInstructionFiles ? await findInstructionFiles(config.workspaceRoot) : [];
+    if (triggeredSkills.length) {
+      await store.addMessage(session.id, {
+        role: "system",
+        content: `Triggered workspace skills:\n\n${triggeredSkills.map((skill) => `- \`${skill.name}\` - ${skill.description || skill.path}`).join("\n")}`,
+        source: "system"
+      });
+      res.write(`data: ${JSON.stringify({ type: "skills", skills: triggeredSkills })}\n\n`);
+    }
     const contextPacket = buildContextPacket({
       reviewPrompt,
       manualContext,
       files: session.files,
+      instructionFiles,
+      workspaceSkills,
+      triggeredSkills,
       history,
       userMessage
     });
@@ -181,10 +207,17 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
       enableTools: Boolean(req.body?.enableTools) && apiMode === "chat",
       signal: abortController.signal,
       onToolCall(name, args) {
+        toolMessages.push({
+          name,
+          content: `Calling \`${name}\` with:\n\n\`\`\`json\n${args}\n\`\`\``
+        });
         res.write(`data: ${JSON.stringify({ type: "tool_call", name, args })}\n\n`);
       },
       onToolResult(name, result) {
-        toolMessages.push({ name, result });
+        toolMessages.push({
+          name,
+          content: `Result from \`${name}\`:\n\n\`\`\`\n${String(result).slice(0, 4000)}\n\`\`\``
+        });
         res.write(`data: ${JSON.stringify({ type: "tool_result", name, result })}\n\n`);
       },
       onDelta(delta) {
@@ -196,7 +229,7 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
     for (const toolMessage of toolMessages) {
       await store.addMessage(session.id, {
         role: "tool",
-        content: toolMessage.result,
+        content: toolMessage.content,
         source: "model",
         toolName: toolMessage.name
       });
@@ -236,10 +269,6 @@ app.listen(config.port, () => {
   console.log(`Thinking Sidecar: http://localhost:${config.port}`);
   console.log(`Workspace root: ${config.workspaceRoot}`);
 });
-
-function normalizeApiMode(value: unknown): ApiMode {
-  return value === "chat" ? "chat" : "responses";
-}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error.";

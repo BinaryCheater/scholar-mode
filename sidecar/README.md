@@ -1,6 +1,6 @@
 # Thinking Sidecar
 
-A local web sidecar for explicit-context reasoning beside Codex. It keeps context transparent: paste a Codex summary, attach workspace-relative file snapshots, then ask an independent review model to challenge the claim, assumptions, rival explanations, weak links, and next evidence.
+A local web sidecar for explicit-context reasoning beside Codex. It keeps context transparent: paste a Codex summary, ask the model to read workspace files through tools, and get an independent review of claims, assumptions, rival explanations, weak links, and next evidence.
 
 ## Run
 
@@ -20,12 +20,12 @@ Useful environment variables:
 - `SIDECAR_DEFAULT_MODEL`: defaults to `gpt-5.5`.
 - `PORT`: defaults to `4317`.
 
-## API Modes
+## API Routing
 
-- `responses`: OpenAI Responses API, streaming text deltas.
-- `chat`: Chat Completions API, streaming text deltas.
+- Official OpenAI endpoints use the Responses API.
+- OpenAI-compatible non-OpenAI endpoints, such as DeepSeek, use Chat Completions.
 
-The provider layer is intentionally small. Tool use is not wired into the first UI path, but the code keeps a `ToolAdapter` seam for future model tools, LangGraph, or Deep Agents orchestration.
+The UI does not expose this as a user choice; the server picks from `OPENAI_BASE_URL`.
 
 For OpenAI-compatible providers such as DeepSeek, set:
 
@@ -34,11 +34,11 @@ OPENAI_BASE_URL=https://api.deepseek.com
 SIDECAR_DEFAULT_MODEL=deepseek-v4-pro
 ```
 
-Then use `chat` mode in the UI.
+The app will automatically route this through Chat Completions.
 
 ## Context And Caching
 
-Each request is self-contained. The server sends the review protocol, manual context, file snapshots, prior session messages, and the current user request together. Stable protocol/context/file content is placed before conversation history and the current request so providers with automatic prompt/context caching can reuse the longest unchanged prefix.
+Each request is self-contained. The server sends the review protocol, manual context, optional instruction files, discovered workspace skills, triggered skills, tool results, prior session messages, and the current user request together. Stable protocol/context content is placed before conversation history and the current request so providers with automatic prompt/context caching can reuse the longest unchanged prefix.
 
 The UI renders assistant messages as Markdown and keeps streaming state per session, so switching sessions during generation does not move partial output into the wrong chat. Use `Stop` to abort an in-flight answer. Edit the context or prompt, then use `Rerun` to answer the previous user request again with the updated context.
 
@@ -46,13 +46,15 @@ User messages can also be edited in place. Saving an edit truncates the session 
 
 ## Workspace Tools
 
-In `chat` mode, enable workspace tools to let the model call a small OpenAI-compatible tool set:
+When the auto-selected route is Chat Completions, enable workspace tools to let the model call a small OpenAI-compatible tool set:
 
 - `list_workspace_files`
 - `read_workspace_file`
 - `get_git_diff`
 
 All file paths are workspace-relative and constrained to `SIDECAR_WORKSPACE_ROOT`. Tool calls and tool results are shown in the chat and persisted in the session history before the final assistant answer.
+
+The UI also lists workspace skills discovered from `SKILL.md` files. When a turn appears to trigger a workspace skill, the triggered skill is inserted into the conversation flow before the answer.
 
 ## Codex Handoff
 

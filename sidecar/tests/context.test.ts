@@ -7,6 +7,9 @@ describe("context packet", () => {
     const packet = buildContextPacket({
       reviewPrompt: DEFAULT_REVIEW_PROMPT,
       manualContext: "Codex summary here",
+      instructionFiles: [],
+      workspaceSkills: [],
+      triggeredSkills: [],
       files: [
         {
           id: "file-1",
@@ -20,7 +23,7 @@ describe("context packet", () => {
       userMessage: "Judge the next experiment."
     });
 
-    expect(packet).toContain("Independent Thinking Protocol");
+    expect(packet).toContain("Sidecar Thinking");
     expect(packet).toContain("Manual Context");
     expect(packet).toContain("notes/experiment.md");
     expect(packet).toContain("metric: unstable");
@@ -32,6 +35,9 @@ describe("context packet", () => {
     const packet = buildContextPacket({
       reviewPrompt: DEFAULT_REVIEW_PROMPT,
       manualContext: "Stable project context",
+      instructionFiles: [],
+      workspaceSkills: [],
+      triggeredSkills: [],
       files: [],
       history: [
         {

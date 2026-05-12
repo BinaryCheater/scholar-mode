@@ -52,17 +52,31 @@ interface AppConfig {
   workspaceRoot: string;
   defaultModel: string;
   openaiBaseURL: string | null;
+  apiMode: ApiMode;
   hasOpenAIKey: boolean;
+}
+
+interface WorkspaceSkill {
+  name: string;
+  description: string;
+  path: string;
+}
+
+interface WorkspaceInfo {
+  instructionFiles: Array<{ path: string; bytes: number }>;
+  skills: WorkspaceSkill[];
 }
 
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceInfo>({ instructionFiles: [], skills: [] });
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [active, setActive] = useState<SidecarSession | null>(null);
   const [message, setMessage] = useState("");
-  const [filePath, setFilePath] = useState("");
   const [streams, setStreams] = useState<Record<string, { text: string; busy: boolean }>>({});
   const [enableTools, setEnableTools] = useState(true);
+  const [includeInstructionFiles, setIncludeInstructionFiles] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
   const [error, setError] = useState("");
   const abortControllers = useRef<Record<string, AbortController>>({});
@@ -74,6 +88,7 @@ function App() {
   async function boot() {
     const cfg = await api<AppConfig>("/api/config");
     setConfig(cfg);
+    setWorkspace(await api<WorkspaceInfo>("/api/workspace"));
     const list = await api<SessionSummary[]>("/api/sessions");
     setSessions(list);
     if (list[0]) {
@@ -107,32 +122,6 @@ function App() {
     const next = await api<SidecarSession>(`/api/sessions/${active.id}`, {
       method: "PATCH",
       body: JSON.stringify(patch)
-    });
-    setActive(next);
-    await refreshSessions();
-  }
-
-  async function addFile(event: FormEvent) {
-    event.preventDefault();
-    if (!active || !filePath.trim()) return;
-    setError("");
-    try {
-      const next = await api<SidecarSession>(`/api/sessions/${active.id}/files`, {
-        method: "POST",
-        body: JSON.stringify({ path: filePath.trim() })
-      });
-      setFilePath("");
-      setActive(next);
-      await refreshSessions();
-    } catch (err) {
-      setError(errorText(err));
-    }
-  }
-
-  async function removeFile(fileId: string) {
-    if (!active) return;
-    const next = await api<SidecarSession>(`/api/sessions/${active.id}/files/${fileId}`, {
-      method: "DELETE"
     });
     setActive(next);
     await refreshSessions();
@@ -182,10 +171,10 @@ function App() {
         body: JSON.stringify({
           message: pending,
           model: session.model,
-          apiMode: session.apiMode,
           manualContext: session.manualContext,
           reviewPrompt: session.reviewPrompt,
           enableTools,
+          includeInstructionFiles,
           existingMessageId: options.existingMessageId
         })
       });
@@ -218,6 +207,12 @@ function App() {
               role: "tool",
               content: `Calling \`${payload.name}\` with:\n\n\`\`\`json\n${payload.args}\n\`\`\``,
               toolName: payload.name
+            });
+          }
+          if (payload.type === "skills") {
+            appendLocalMessage(sessionId, {
+              role: "system",
+              content: `Triggered workspace skills:\n\n${payload.skills.map((skill: WorkspaceSkill) => `- \`${skill.name}\` — ${skill.description || skill.path}`).join("\n")}`
             });
           }
           if (payload.type === "tool_result") {
@@ -325,58 +320,67 @@ function App() {
   const activeBusy = Boolean(active && streams[active.id]?.busy);
 
   return (
-    <main className="app-shell">
+    <main className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
       <aside className="sidebar">
         <div className="brand-row">
           <div>
             <h1>Thinking Sidecar</h1>
-            <p>{config?.workspaceRoot || "Loading workspace..."}</p>
-            {config?.openaiBaseURL && <p>{config.openaiBaseURL}</p>}
+            {!sidebarCollapsed && (
+              <>
+                <p>{config?.workspaceRoot || "Loading workspace..."}</p>
+                {config?.openaiBaseURL && <p>{config.openaiBaseURL}</p>}
+              </>
+            )}
           </div>
-          <button className="icon-button" onClick={createSession} title="New session">
-            +
-          </button>
-        </div>
-
-        <div className="session-list">
-          {sessions.map((session) => (
-            <button
-              key={session.id}
-              className={session.id === active?.id ? "session active" : "session"}
-              onClick={() => loadSession(session.id)}
-            >
-              <span>{session.title}</span>
-              <small>
-                {session.messageCount} messages · {session.fileCount} files{streams[session.id]?.busy ? " · thinking" : ""}
-              </small>
+          <div className="brand-actions">
+            <button className="icon-button" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} title="Toggle sidebar">
+              {sidebarCollapsed ? "›" : "‹"}
             </button>
-          ))}
+            <button className="icon-button primary" onClick={createSession} title="New session">
+              +
+            </button>
+          </div>
         </div>
 
-        {active && (
+        {!sidebarCollapsed && (
+          <>
+            <div className="session-list">
+              {sessions.map((session) => (
+                <button
+                  key={session.id}
+                  className={session.id === active?.id ? "session active" : "session"}
+                  onClick={() => loadSession(session.id)}
+                >
+                  <span>{session.title}</span>
+                  <small>
+                    {session.messageCount} messages · {streams[session.id]?.busy ? "thinking" : "idle"}
+                  </small>
+                </button>
+              ))}
+            </div>
+
+            {active && (
           <section className="context-panel">
             <label>
               Session title
               <input value={active.title} onChange={(event) => setActive({ ...active, title: event.target.value })} onBlur={() => saveSessionPatch({ title: active.title })} />
             </label>
 
-            <div className="grid-two">
+            <div className="model-row">
               <label>
                 Model
                 <input value={active.model} onChange={(event) => setActive({ ...active, model: event.target.value })} onBlur={() => saveSessionPatch({ model: active.model })} />
               </label>
-              <label>
-                API
-                <select value={active.apiMode} onChange={(event) => saveSessionPatch({ apiMode: event.target.value as ApiMode })}>
-                  <option value="responses">Responses</option>
-                  <option value="chat">Chat</option>
-                </select>
-              </label>
+              <div className="mode-pill">auto · {config?.apiMode || active.apiMode}</div>
             </div>
 
             <label className="checkbox-label">
-              <input type="checkbox" checked={enableTools} onChange={(event) => setEnableTools(event.target.checked)} disabled={active.apiMode !== "chat"} />
+              <input type="checkbox" checked={enableTools} onChange={(event) => setEnableTools(event.target.checked)} disabled={config?.apiMode !== "chat"} />
               Enable workspace tools
+            </label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={includeInstructionFiles} onChange={(event) => setIncludeInstructionFiles(event.target.checked)} />
+              Include CLAUDE.md / AGENTS.md
             </label>
 
             <label>
@@ -398,28 +402,27 @@ function App() {
                 onBlur={() => saveSessionPatch({ reviewPrompt: active.reviewPrompt })}
               />
             </details>
-
-            <form onSubmit={addFile} className="file-form">
-              <label>
-                Add workspace file
-                <div className="path-row">
-                  <input value={filePath} onChange={(event) => setFilePath(event.target.value)} placeholder="SKILL.md" />
-                  <button>Add</button>
+            <details className="workspace-skills" open>
+              <summary>Workspace skills ({workspace.skills.length})</summary>
+              {workspace.instructionFiles.length > 0 && (
+                <div className="meta-list">
+                  {workspace.instructionFiles.map((file) => (
+                    <span key={file.path}>{file.path}</span>
+                  ))}
                 </div>
-              </label>
-            </form>
-
-            <div className="file-list">
-              {active.files.map((file) => (
-                <div key={file.id} className="file-chip">
-                  <span title={file.path}>{file.path}</span>
-                  <button onClick={() => removeFile(file.id)} title="Remove file">
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+              )}
+              <div className="skill-list">
+                {workspace.skills.map((skill) => (
+                  <div key={`${skill.path}-${skill.name}`} className="skill-row">
+                    <strong>{skill.name}</strong>
+                    <span>{skill.description || skill.path}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
           </section>
+            )}
+          </>
         )}
       </aside>
 
@@ -428,7 +431,7 @@ function App() {
           <div>
             <strong>{active?.title || "No session"}</strong>
             <span>
-              {active?.model || config?.defaultModel} · {active?.apiMode || "responses"}
+              {active?.model || config?.defaultModel} · {config?.apiMode || "auto"} · {enableTools && config?.apiMode === "chat" ? "tools on" : "tools off"}
             </span>
           </div>
           <div className={config?.hasOpenAIKey ? "status ok" : "status warn"}>{config?.hasOpenAIKey ? "OPENAI_API_KEY set" : "OPENAI_API_KEY missing"}</div>
@@ -521,6 +524,7 @@ function errorText(error: unknown) {
 function messageLabel(item: SessionMessage) {
   if (item.role === "assistant") return "Sidecar";
   if (item.role === "tool") return item.toolName ? `Tool · ${item.toolName}` : "Tool";
+  if (item.role === "system") return "System";
   return "You";
 }
 

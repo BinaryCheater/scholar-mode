@@ -1,9 +1,12 @@
-import type { FileSnapshot, SessionMessage } from "./types.js";
+import type { FileSnapshot, SessionMessage, WorkspaceSkill } from "./types.js";
 
 interface ContextPacketInput {
   reviewPrompt: string;
   manualContext: string;
   files: FileSnapshot[];
+  instructionFiles: FileSnapshot[];
+  workspaceSkills: WorkspaceSkill[];
+  triggeredSkills: WorkspaceSkill[];
   history: SessionMessage[];
   userMessage: string;
 }
@@ -27,12 +30,33 @@ ${file.content}`
         .join("\n\n")
     : "No prior messages in this session.";
 
+  const instructions = input.instructionFiles.length
+    ? input.instructionFiles.map((file) => `### ${file.path}\n\n${file.content}`).join("\n\n---\n\n")
+    : "Instruction files were not included.";
+
+  const skills = input.workspaceSkills.length
+    ? input.workspaceSkills.map((skill) => `- ${skill.name}: ${skill.description} (${skill.path})`).join("\n")
+    : "No workspace skills were discovered.";
+
+  const triggered = input.triggeredSkills.length
+    ? input.triggeredSkills.map((skill) => `- ${skill.name}: ${skill.description} (${skill.path})`).join("\n")
+    : "No workspace skill appears directly triggered by this turn.";
+
   return `${input.reviewPrompt}
 
 ## Explicit Context Packet
 
 ### Manual Context
 ${input.manualContext.trim() || "No manual context was supplied."}
+
+### Instruction Files
+${instructions}
+
+### Workspace Skills
+${skills}
+
+### Triggered Skills For This Turn
+${triggered}
 
 ### File Snapshots
 ${files}

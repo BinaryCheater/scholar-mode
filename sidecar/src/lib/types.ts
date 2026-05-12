@@ -46,5 +46,12 @@ export interface AppConfig {
   dataFile: string;
   defaultModel: string;
   openaiBaseURL?: string;
+  apiMode: ApiMode;
   port: number;
+}
+
+export interface WorkspaceSkill {
+  name: string;
+  description: string;
+  path: string;
 }
