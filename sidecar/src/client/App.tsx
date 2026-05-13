@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { groupToolMessages, type ToolExchange, type ToolRun } from "./toolMessages";
+import { ResearchGraphView } from "./ResearchGraphView";
 import "./styles.css";
 
 type ApiMode = "responses" | "chat";
@@ -77,6 +78,7 @@ interface WorkspaceInfo {
 }
 
 function App() {
+  const [activeView, setActiveView] = useState<"chat" | "graph">("chat");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceInfo>({ instructionFiles: [], skills: [] });
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -327,191 +329,214 @@ function App() {
   }, [active, streams]);
 
   const activeBusy = Boolean(active && streams[active.id]?.busy);
+  const appClassName = sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell";
+  const topbarTitle = activeView === "graph" ? "Research Graph" : active?.title || "No session";
+  const topbarSubtitle =
+    activeView === "graph"
+      ? `${config?.workspaceRoot || "Workspace"} · graph`
+      : `${active?.model || config?.defaultModel} · ${config?.apiMode || "auto"} · ${enableTools && config?.apiMode === "chat" ? "tools on" : "tools off"}`;
+  const topbar = (
+    <header className="topbar">
+      <div>
+        <strong>{topbarTitle}</strong>
+        <span>{topbarSubtitle}</span>
+      </div>
+      <div className="topbar-actions">
+        <div className="view-tabs" aria-label="Workspace view">
+          <button className={activeView === "chat" ? "active" : ""} onClick={() => setActiveView("chat")}>
+            Chat
+          </button>
+          <button className={activeView === "graph" ? "active" : ""} onClick={() => setActiveView("graph")}>
+            Graph
+          </button>
+        </div>
+        <div className={config?.hasOpenAIKey ? "status ok" : "status warn"}>{config?.hasOpenAIKey ? "OPENAI_API_KEY set" : "OPENAI_API_KEY missing"}</div>
+      </div>
+    </header>
+  );
+
+  if (activeView === "graph") {
+    return <ResearchGraphView error={error} header={topbar} />;
+  }
 
   return (
-    <main className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
+    <main className={appClassName}>
       <aside className="sidebar">
-        <div className="brand-row">
-          <div>
-            <h1>Thinking Sidecar</h1>
-            {!sidebarCollapsed && (
-              <>
-                <p>{config?.workspaceRoot || "Loading workspace..."}</p>
-                {config?.openaiBaseURL && <p>{config.openaiBaseURL}</p>}
-              </>
-            )}
-          </div>
-          <div className="brand-actions">
-            <button className="icon-button" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} title="Toggle sidebar">
-              {sidebarCollapsed ? "›" : "‹"}
-            </button>
-            <button className="icon-button primary" onClick={createSession} title="New session">
-              +
-            </button>
-          </div>
-        </div>
-
-        {!sidebarCollapsed && (
-          <>
-            <div className="session-list">
-              {sessions.map((session) => (
-                <button
-                  key={session.id}
-                  className={session.id === active?.id ? "session active" : "session"}
-                  onClick={() => loadSession(session.id)}
-                >
-                  <span>{session.title}</span>
-                  <small>
-                    {session.messageCount} messages · {streams[session.id]?.busy ? "thinking" : "idle"}
-                  </small>
-                </button>
-              ))}
-            </div>
-
-            {active && (
-          <section className="context-panel">
-            <label>
-              Session title
-              <input value={active.title} onChange={(event) => setActive({ ...active, title: event.target.value })} onBlur={() => saveSessionPatch({ title: active.title })} />
-            </label>
-
-            <div className="model-row">
-              <label>
-                Model
-                <input value={active.model} onChange={(event) => setActive({ ...active, model: event.target.value })} onBlur={() => saveSessionPatch({ model: active.model })} />
-              </label>
-              <div className="mode-pill">auto · {config?.apiMode || active.apiMode}</div>
-            </div>
-
-            <label className="checkbox-label">
-              <input type="checkbox" checked={enableTools} onChange={(event) => setEnableTools(event.target.checked)} disabled={config?.apiMode !== "chat"} />
-              Enable workspace tools
-            </label>
-            <label className="checkbox-label">
-              <input type="checkbox" checked={includeInstructionFiles} onChange={(event) => setIncludeInstructionFiles(event.target.checked)} />
-              Include CLAUDE.md / AGENTS.md
-            </label>
-
-            <label>
-              Codex/context packet notes
-              <textarea
-                value={active.manualContext}
-                onChange={(event) => setActive({ ...active, manualContext: event.target.value })}
-                onBlur={() => saveSessionPatch({ manualContext: active.manualContext })}
-                placeholder="Paste Codex's summary, current plan, diffs, or experiment notes here."
-              />
-            </label>
-
-            <details>
-              <summary>Review prompt</summary>
-              <textarea
-                className="prompt-box"
-                value={active.reviewPrompt}
-                onChange={(event) => setActive({ ...active, reviewPrompt: event.target.value })}
-                onBlur={() => saveSessionPatch({ reviewPrompt: active.reviewPrompt })}
-              />
-            </details>
-            <details className="workspace-skills" open>
-              <summary>Workspace skills ({workspace.skills.length})</summary>
-              {workspace.instructionFiles.length > 0 && (
-                <div className="meta-list">
-                  {workspace.instructionFiles.map((file) => (
-                    <span key={file.path}>{file.path}</span>
-                  ))}
-                </div>
+          <div className="brand-row">
+            <div>
+              <h1>Thinking Sidecar</h1>
+              {!sidebarCollapsed && (
+                <>
+                  <p>{config?.workspaceRoot || "Loading workspace..."}</p>
+                  {config?.openaiBaseURL && <p>{config.openaiBaseURL}</p>}
+                </>
               )}
-              <div className="skill-list">
-                {workspace.skills.map((skill) => (
-                  <div key={`${skill.path}-${skill.name}`} className="skill-row">
-                    <strong>{skill.name}</strong>
-                    <span>{skill.description || skill.path}</span>
-                  </div>
+            </div>
+            <div className="brand-actions">
+              <button className="icon-button" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} title="Toggle sidebar">
+                {sidebarCollapsed ? "›" : "‹"}
+              </button>
+              <button className="icon-button primary" onClick={createSession} title="New session">
+                +
+              </button>
+            </div>
+          </div>
+
+          {!sidebarCollapsed && (
+            <>
+              <div className="session-list">
+                {sessions.map((session) => (
+                  <button
+                    key={session.id}
+                    className={session.id === active?.id ? "session active" : "session"}
+                    onClick={() => loadSession(session.id)}
+                  >
+                    <span>{session.title}</span>
+                    <small>
+                      {session.messageCount} messages · {streams[session.id]?.busy ? "thinking" : "idle"}
+                    </small>
+                  </button>
                 ))}
               </div>
-            </details>
-          </section>
-            )}
-          </>
-        )}
+
+              {active && (
+                <section className="context-panel">
+                  <label>
+                    Session title
+                    <input value={active.title} onChange={(event) => setActive({ ...active, title: event.target.value })} onBlur={() => saveSessionPatch({ title: active.title })} />
+                  </label>
+
+                  <div className="model-row">
+                    <label>
+                      Model
+                      <input value={active.model} onChange={(event) => setActive({ ...active, model: event.target.value })} onBlur={() => saveSessionPatch({ model: active.model })} />
+                    </label>
+                    <div className="mode-pill">auto · {config?.apiMode || active.apiMode}</div>
+                  </div>
+
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={enableTools} onChange={(event) => setEnableTools(event.target.checked)} disabled={config?.apiMode !== "chat"} />
+                    Enable workspace tools
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={includeInstructionFiles} onChange={(event) => setIncludeInstructionFiles(event.target.checked)} />
+                    Include CLAUDE.md / AGENTS.md
+                  </label>
+
+                  <label>
+                    Codex/context packet notes
+                    <textarea
+                      value={active.manualContext}
+                      onChange={(event) => setActive({ ...active, manualContext: event.target.value })}
+                      onBlur={() => saveSessionPatch({ manualContext: active.manualContext })}
+                      placeholder="Paste Codex's summary, current plan, diffs, or experiment notes here."
+                    />
+                  </label>
+
+                  <details>
+                    <summary>Review prompt</summary>
+                    <textarea
+                      className="prompt-box"
+                      value={active.reviewPrompt}
+                      onChange={(event) => setActive({ ...active, reviewPrompt: event.target.value })}
+                      onBlur={() => saveSessionPatch({ reviewPrompt: active.reviewPrompt })}
+                    />
+                  </details>
+                  <details className="workspace-skills" open>
+                    <summary>Workspace skills ({workspace.skills.length})</summary>
+                    {workspace.instructionFiles.length > 0 && (
+                      <div className="meta-list">
+                        {workspace.instructionFiles.map((file) => (
+                          <span key={file.path}>{file.path}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="skill-list">
+                      {workspace.skills.map((skill) => (
+                        <div key={`${skill.path}-${skill.name}`} className="skill-row">
+                          <strong>{skill.name}</strong>
+                          <span>{skill.description || skill.path}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </section>
+              )}
+            </>
+          )}
       </aside>
 
       <section className="chat-pane">
-        <header className="topbar">
-          <div>
-            <strong>{active?.title || "No session"}</strong>
-            <span>
-              {active?.model || config?.defaultModel} · {config?.apiMode || "auto"} · {enableTools && config?.apiMode === "chat" ? "tools on" : "tools off"}
-            </span>
-          </div>
-          <div className={config?.hasOpenAIKey ? "status ok" : "status warn"}>{config?.hasOpenAIKey ? "OPENAI_API_KEY set" : "OPENAI_API_KEY missing"}</div>
-        </header>
+        {topbar}
 
         {error && <div className="error-banner">{error}</div>}
 
-        <div className="messages">
-          {displayItems.length === 0 && (
-            <div className="empty-state">
-              <h2>Start with a claim, plan, or uncertainty.</h2>
-              <p>Add explicit context on the left, then ask the sidecar to challenge the reasoning.</p>
-            </div>
-          )}
-          {displayItems.map((displayItem) =>
-            displayItem.kind === "tool-run" ? (
-              <ToolRunMessage key={displayItem.run.id} run={displayItem.run} />
-            ) : (
-              <article key={displayItem.message.id} className={`message ${displayItem.message.role}`}>
-                <>
-                  <div className="message-meta">
-                    <span>{messageLabel(displayItem.message)}</span>
-                    {displayItem.message.model && <small>{displayItem.message.model}</small>}
-                    {displayItem.message.role === "user" && !activeBusy && (
-                      <button className="text-button" onClick={() => setEditing({ id: displayItem.message.id, content: displayItem.message.content })}>
-                        Edit
-                      </button>
-                    )}
-                  </div>
-                  {editing?.id === displayItem.message.id ? (
-                    <form
-                      className="edit-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void editUserMessage(displayItem.message.id, editing.content);
-                      }}
-                    >
-                      <textarea value={editing.content} onChange={(event) => setEditing({ id: displayItem.message.id, content: event.target.value })} />
-                      <div className="composer-actions">
-                        <button type="button" className="secondary-button" onClick={() => setEditing(null)}>
-                          Cancel
-                        </button>
-                        <button>Save & rerun</button>
+        <>
+            <div className="messages">
+              {displayItems.length === 0 && (
+                <div className="empty-state">
+                  <h2>Start with a claim, plan, or uncertainty.</h2>
+                  <p>Add explicit context on the left, then ask the sidecar to challenge the reasoning.</p>
+                </div>
+              )}
+              {displayItems.map((displayItem) =>
+                displayItem.kind === "tool-run" ? (
+                  <ToolRunMessage key={displayItem.run.id} run={displayItem.run} />
+                ) : (
+                  <article key={displayItem.message.id} className={`message ${displayItem.message.role}`}>
+                    <>
+                      <div className="message-meta">
+                        <span>{messageLabel(displayItem.message)}</span>
+                        {displayItem.message.model && <small>{displayItem.message.model}</small>}
+                        {displayItem.message.role === "user" && !activeBusy && (
+                          <button className="text-button" onClick={() => setEditing({ id: displayItem.message.id, content: displayItem.message.content })}>
+                            Edit
+                          </button>
+                        )}
                       </div>
-                    </form>
-                  ) : (
-                    <div className="message-body markdown-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayItem.message.content}</ReactMarkdown>
-                    </div>
-                  )}
-                </>
-              </article>
-            )
-          )}
-        </div>
+                      {editing?.id === displayItem.message.id ? (
+                        <form
+                          className="edit-form"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void editUserMessage(displayItem.message.id, editing.content);
+                          }}
+                        >
+                          <textarea value={editing.content} onChange={(event) => setEditing({ id: editing.id, content: event.target.value })} />
+                          <div className="composer-actions">
+                            <button type="button" className="secondary-button" onClick={() => setEditing(null)}>
+                              Cancel
+                            </button>
+                            <button>Save & rerun</button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="message-body markdown-body">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayItem.message.content}</ReactMarkdown>
+                        </div>
+                      )}
+                    </>
+                  </article>
+                )
+              )}
+            </div>
 
-        <form className="composer" onSubmit={sendMessage}>
-          <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask for an independent review, rival hypotheses, weak links, or the next evidence to gather." />
-          <div className="composer-actions">
-            <button type="button" className="secondary-button" disabled={!active?.messages.some((item) => item.role === "user") || activeBusy} onClick={rerunLastUserMessage}>
-              Rerun
-            </button>
-            {activeBusy ? (
-              <button type="button" className="stop-button" onClick={stopStreaming}>
-                Stop
-              </button>
-            ) : (
-              <button disabled={!message.trim()}>Send</button>
-            )}
-          </div>
-        </form>
+            <form className="composer" onSubmit={sendMessage}>
+              <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask for an independent review, rival hypotheses, weak links, or the next evidence to gather." />
+              <div className="composer-actions">
+                <button type="button" className="secondary-button" disabled={!active?.messages.some((item) => item.role === "user") || activeBusy} onClick={rerunLastUserMessage}>
+                  Rerun
+                </button>
+                {activeBusy ? (
+                  <button type="button" className="stop-button" onClick={stopStreaming}>
+                    Stop
+                  </button>
+                ) : (
+                  <button disabled={!message.trim()}>Send</button>
+                )}
+              </div>
+            </form>
+          </>
       </section>
     </main>
   );
