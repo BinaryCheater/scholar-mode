@@ -12,9 +12,40 @@ The app can be embedded inside a research repo or installed elsewhere and pointe
 
 ## Installation Shapes
 
-### Embedded In A Research Repo
+There are two intended ways to use Sidecar.
 
-Use this when the app code is part of the same repository as the research files.
+### Home Install, Pointed At A Workspace
+
+Use this when you want to install the Sidecar app once under your home directory and use it with many research repositories.
+
+```txt
+~/Applications/thinking-sidecar/
+  sidecar/
+
+~/Research/project-a/
+  .side/
+  research/
+    graph.yaml
+```
+
+Initialize any workspace:
+
+```bash
+cd ~/Applications/thinking-sidecar/sidecar
+npm run codex:install -- --workspace ~/Research/project-a
+```
+
+Run the app for that workspace:
+
+```bash
+SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
+```
+
+This keeps the app code out of the research repo while storing `.side/`, skills, graph, sessions, and config in the research workspace.
+
+### Workspace-Local Install
+
+Use this when the Sidecar app itself should live inside the research repo.
 
 ```txt
 my-research-repo/
@@ -30,30 +61,13 @@ Run:
 ```bash
 cd sidecar
 npm install
+npm run codex:install -- --workspace ..
 npm run dev
 ```
 
-The default workspace root is the parent directory of `sidecar`, so this layout works without extra environment variables.
+The default workspace root is the parent of `sidecar`, so this layout works without `SIDECAR_WORKSPACE_ROOT`.
 
-### Installed Separately
-
-Use this when Sidecar is installed once under a user folder and should open different research repos.
-
-```txt
-~/Applications/thinking-sidecar/sidecar/
-~/Research/project-a/
-  research/graph.yaml
-  notes/
-```
-
-Run:
-
-```bash
-cd ~/Applications/thinking-sidecar/sidecar
-SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
-```
-
-All graph paths, file previews, tools, session state, and `.side/config.json` apply to the configured workspace root, not the app install directory.
+In both modes, graph paths, file previews, tools, session state, and `.side/config.json` apply to the workspace root, not necessarily to the app install directory.
 
 ## Workspace State
 
@@ -85,6 +99,30 @@ Sidecar writes app state under the workspace:
 ```
 
 Keep `.side/` out of git because it may contain API keys and private session history.
+
+## Workspace Install Command
+
+`codex:install` initializes a target workspace:
+
+```bash
+npm run codex:install -- --workspace /path/to/workspace
+```
+
+It creates:
+
+- `.side/config.json`
+- `.side/sessions/index.json`
+- `.gitignore` entry for `.side/`
+- `skills/scholar-mode`
+- `skills/sidecar-thinking`
+- starter `research/graph.yaml` and `research/rq.main.md`, unless disabled
+
+Options:
+
+- `--graph notes/maps/graph.yaml`: choose the graph manifest path.
+- `--no-graph`: skip starter graph creation.
+- `--no-skills`: skip copying bundled skills.
+- `--force`: overwrite install-managed graph and skill files.
 
 ## Research Graph
 

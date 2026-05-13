@@ -26,21 +26,27 @@ research/
   *.md / *.html       research content
 ```
 
-Run the app:
+Two supported install shapes:
+
+1. Install the app under your home directory and point it at any workspace:
+
+```bash
+cd ~/Applications/thinking-sidecar/sidecar
+npm install
+npm run codex:install -- --workspace ~/Research/project-a
+SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
+```
+
+2. Put the app inside the workspace itself:
 
 ```bash
 cd sidecar
 npm install
+npm run codex:install -- --workspace ..
 npm run dev
 ```
 
 Open `http://localhost:4317`.
-
-For a separately installed app, point it at any research repo:
-
-```bash
-SIDECAR_WORKSPACE_ROOT=/path/to/research-repo npm run dev
-```
 
 Install skills globally for Codex:
 

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { execFile } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,6 +20,45 @@ afterEach(async () => {
 });
 
 describe("codex sidecar CLI", () => {
+  it("installs sidecar workspace state, starter graph, and bundled skills into any directory", async () => {
+    const workspace = join(process.cwd(), ".tmp-tests", crypto.randomUUID());
+
+    const { stdout } = await execFileAsync("node", [scriptPath, "install", "--workspace", workspace, "--graph", "notes/maps/graph.yaml"]);
+
+    const config = JSON.parse(await readFile(join(workspace, ".side", "config.json"), "utf8"));
+    const index = JSON.parse(await readFile(join(workspace, ".side", "sessions", "index.json"), "utf8"));
+    const graph = await readFile(join(workspace, "notes", "maps", "graph.yaml"), "utf8");
+    const note = await readFile(join(workspace, "notes", "maps", "rq.main.md"), "utf8");
+    const gitignore = await readFile(join(workspace, ".gitignore"), "utf8");
+    const sidecarSkill = await readFile(join(workspace, "skills", "sidecar-thinking", "SKILL.md"), "utf8");
+    const scholarSkill = await readFile(join(workspace, "skills", "scholar-mode", "SKILL.md"), "utf8");
+
+    expect(stdout).toContain("Thinking Sidecar workspace installed");
+    expect(stdout).toContain(`Workspace: ${workspace}`);
+    expect(stdout).toContain("Run from a home/user-level Sidecar install:");
+    expect(stdout).toContain("Or, if the Sidecar app itself is copied into this workspace:");
+    expect(config.graph.manifestPath).toBe("notes/maps/graph.yaml");
+    expect(config.tools.allowedWriteExtensions).toEqual([".md", ".markdown", ".html", ".htm"]);
+    expect(index).toEqual({ sessions: [] });
+    expect(graph).toContain("root: rq.main");
+    expect(note).toContain("# Core research question");
+    expect(gitignore).toContain(".side/");
+    expect(sidecarSkill).toContain("name: sidecar-thinking");
+    expect(scholarSkill).toContain("name: scholar-mode");
+  });
+
+  it("does not overwrite existing graph files unless force is used", async () => {
+    const workspace = join(process.cwd(), ".tmp-tests", crypto.randomUUID());
+    await mkdir(join(workspace, "research"), { recursive: true });
+    await writeFile(join(workspace, "research", "graph.yaml"), "root: existing\n", "utf8");
+
+    await execFileAsync("node", [scriptPath, "install", "--workspace", workspace]);
+    expect(await readFile(join(workspace, "research", "graph.yaml"), "utf8")).toBe("root: existing\n");
+
+    await execFileAsync("node", [scriptPath, "install", "--workspace", workspace, "--force"]);
+    expect(await readFile(join(workspace, "research", "graph.yaml"), "utf8")).toContain("root: rq.main");
+  });
+
   it("creates a call session with context, files, and an optional user question", async () => {
     const requests: Array<{ method: string; url: string; body: unknown }> = [];
     activeServer = createServer(async (req, res) => {

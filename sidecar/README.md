@@ -4,9 +4,27 @@ A local web sidecar for explicit-context reasoning beside Codex. It keeps contex
 
 ## Run
 
+There are two supported ways to use the app.
+
+### Home Install
+
+Install the app once under a user directory and point it at any workspace:
+
+```bash
+cd ~/Applications/thinking-sidecar/sidecar
+npm install
+npm run codex:install -- --workspace ~/Research/project-a
+SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
+```
+
+### Workspace-Local Install
+
+Keep the app inside the research workspace:
+
 ```bash
 cd sidecar
 cp .env.example .env
+npm run codex:install -- --workspace ..
 OPENAI_API_KEY=sk-... npm run dev
 ```
 
@@ -21,7 +39,24 @@ Useful environment variables:
 - `SIDECAR_DEFAULT_MODEL`: defaults to `gpt-5.5`.
 - `PORT`: defaults to `4317`.
 
-The app can be embedded in a research repo or installed separately. In separate-install mode, always set `SIDECAR_WORKSPACE_ROOT` to the repo that contains the Markdown, HTML, `graph.yaml`, and `.side/` state.
+In home-install mode, always set `SIDECAR_WORKSPACE_ROOT` to the repo that contains the Markdown, HTML, `graph.yaml`, and `.side/` state. In workspace-local mode, the default workspace root is the parent of `sidecar`.
+
+## Workspace Install Command
+
+Initialize any workspace:
+
+```bash
+npm run codex:install -- --workspace /path/to/workspace
+```
+
+This creates `.side/config.json`, `.side/sessions/index.json`, a `.gitignore` entry for `.side/`, bundled workspace skills, and a starter graph unless disabled.
+
+Useful options:
+
+- `--graph notes/maps/graph.yaml`
+- `--no-graph`
+- `--no-skills`
+- `--force`
 
 ## API Routing
 
