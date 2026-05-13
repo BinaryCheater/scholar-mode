@@ -7,6 +7,8 @@
     "dev": "tsx src/server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist-server/index.js",
+    "codex:ask": "node scripts/codex-sidecar.mjs ask",
+    "codex:call": "node scripts/codex-sidecar.mjs call",
     "codex:session": "node scripts/codex-sidecar.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -22,6 +24,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "vite": "^7.2.7",
+    "yaml": "^2.9.0",
     "zod": "^4.2.0"
   },
   "devDependencies": {

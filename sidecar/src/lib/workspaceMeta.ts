@@ -36,19 +36,24 @@ export async function findInstructionFiles(workspaceRoot: string): Promise<FileS
 export async function scanWorkspaceSkills(workspaceRoot: string): Promise<WorkspaceSkill[]> {
   const files = await listFiles(workspaceRoot, 5);
   const skillFiles = files.filter((file) => file.endsWith("SKILL.md")).sort();
-  const skills: WorkspaceSkill[] = [];
+  const skillsByName = new Map<string, WorkspaceSkill>();
   for (const path of skillFiles) {
     const content = await readFile(join(workspaceRoot, path), "utf8");
     const meta = parseSkillFrontmatter(content);
     if (meta.name) {
-      skills.push({
+      const skill = {
         name: meta.name,
         description: meta.description || "",
         path
-      });
+      };
+      const key = meta.name.toLowerCase();
+      const existing = skillsByName.get(key);
+      if (!existing || skillPriority(skill.path) > skillPriority(existing.path)) {
+        skillsByName.set(key, skill);
+      }
     }
   }
-  return skills;
+  return [...skillsByName.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export function selectTriggeredSkills(skills: WorkspaceSkill[], text: string) {
@@ -130,6 +135,12 @@ function parseSkillFrontmatter(content: string) {
     name: raw.match(/^name:\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim(),
     description: raw.match(/^description:\s*["']?([\s\S]*?)["']?\s*$/m)?.[1]?.trim()
   };
+}
+
+function skillPriority(path: string) {
+  if (/^skills\/[^/]+\/SKILL\.md$/i.test(path)) return 3;
+  if (/^\.agents\/skills\/[^/]+\/SKILL\.md$/i.test(path)) return 2;
+  return 1;
 }
 
 function scoreSkill(skill: WorkspaceSkill, query: Set<string>, rawText: string) {

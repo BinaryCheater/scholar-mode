@@ -1,25 +1,29 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { detectFilePreviewFormat } from "./files.js";
 import { DEFAULT_MODEL, DEFAULT_REVIEW_PROMPT } from "./prompt.js";
 import type { FileSnapshot, SessionMessage, SidecarSession } from "./types.js";
 
-interface StoreShape {
-  sessions: SidecarSession[];
+interface SessionIndex {
+  sessions: SessionIndexEntry[];
+}
+
+interface SessionIndexEntry extends Omit<SidecarSession, "files" | "messages" | "manualContext" | "reviewPrompt"> {
+  messageCount: number;
+  fileCount: number;
 }
 
 export class JsonSessionStore {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly indexFile: string,
+    private readonly options: { legacyFile?: string } = {}
+  ) {}
 
   async listSessions() {
-    const data = await this.read();
-    return data.sessions
+    const index = await this.readIndex();
+    return index.sessions
       .slice()
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .map(({ messages, files, ...session }) => ({
-        ...session,
-        messageCount: messages.length,
-        fileCount: files.length
-      }));
   }
 
   async createSession(input: Partial<Pick<SidecarSession, "title" | "model" | "apiMode">> = {}) {
@@ -37,15 +41,20 @@ export class JsonSessionStore {
       messages: []
     };
 
-    const data = await this.read();
-    data.sessions.push(session);
-    await this.write(data);
+    const index = await this.readIndex();
+    index.sessions.push(toIndexEntry(session));
+    await this.writeSession(session);
+    await this.writeIndex(index);
     return session;
   }
 
   async getSession(id: string) {
-    const data = await this.read();
-    return data.sessions.find((session) => session.id === id) ?? null;
+    try {
+      return await this.readSession(id);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
   }
 
   async updateSession(
@@ -89,14 +98,19 @@ export class JsonSessionStore {
     });
   }
 
-  async addFile(sessionId: string, input: Omit<FileSnapshot, "id" | "addedAt"> & Partial<Pick<FileSnapshot, "id" | "addedAt">>) {
+  async addFile(
+    sessionId: string,
+    input: Omit<FileSnapshot, "id" | "addedAt" | "format" | "mimeType"> & Partial<Pick<FileSnapshot, "id" | "addedAt" | "format" | "mimeType">>
+  ) {
     return this.mutateSession(sessionId, (session) => {
+      const previewFormat = input.format && input.mimeType ? { format: input.format, mimeType: input.mimeType } : detectFilePreviewFormat(input.path);
       session.files.push({
         id: input.id || crypto.randomUUID(),
         addedAt: input.addedAt || new Date().toISOString(),
         path: input.path,
         content: input.content,
-        bytes: input.bytes
+        bytes: input.bytes,
+        ...previewFormat
       });
     });
   }
@@ -108,35 +122,95 @@ export class JsonSessionStore {
   }
 
   private async mutateSession(id: string, mutate: (session: SidecarSession) => void) {
-    const data = await this.read();
-    const session = data.sessions.find((candidate) => candidate.id === id);
-    if (!session) {
-      throw new Error("Session not found.");
-    }
+    const session = await this.getSession(id);
+    if (!session) throw new Error("Session not found.");
     mutate(session);
     session.updatedAt = new Date().toISOString();
-    await this.write(data);
+    await this.writeSession(session);
+    await this.upsertIndex(session);
     return session;
   }
 
-  private async read(): Promise<StoreShape> {
+  private async readIndex(): Promise<SessionIndex> {
     try {
-      const raw = await readFile(this.filePath, "utf8");
-      return JSON.parse(raw) as StoreShape;
+      const raw = await readFile(this.indexFile, "utf8");
+      return JSON.parse(raw) as SessionIndex;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        const migrated = await this.migrateLegacyFile();
+        if (migrated) return migrated;
         return { sessions: [] };
       }
       throw error;
     }
   }
 
-  private async write(data: StoreShape) {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    const tmp = `${this.filePath}.${crypto.randomUUID()}.tmp`;
-    await writeFile(tmp, JSON.stringify(data, null, 2));
-    await rename(tmp, this.filePath);
+  private async writeIndex(index: SessionIndex) {
+    await atomicWriteJson(this.indexFile, index);
   }
+
+  private async readSession(id: string): Promise<SidecarSession> {
+    const raw = await readFile(this.sessionPath(id), "utf8");
+    return JSON.parse(raw) as SidecarSession;
+  }
+
+  private async writeSession(session: SidecarSession) {
+    await atomicWriteJson(this.sessionPath(session.id), session);
+  }
+
+  private async upsertIndex(session: SidecarSession) {
+    const index = await this.readIndex();
+    const next = toIndexEntry(session);
+    const existing = index.sessions.findIndex((item) => item.id === session.id);
+    if (existing >= 0) index.sessions[existing] = next;
+    else index.sessions.push(next);
+    await this.writeIndex(index);
+  }
+
+  private sessionPath(id: string) {
+    return join(dirname(this.indexFile), `${id}.json`);
+  }
+
+  private async migrateLegacyFile(): Promise<SessionIndex | null> {
+    if (!this.options.legacyFile) return null;
+    try {
+      const raw = await readFile(this.options.legacyFile, "utf8");
+      const legacy = JSON.parse(raw) as { sessions?: SidecarSession[] };
+      const sessions = Array.isArray(legacy.sessions) ? legacy.sessions : [];
+      const index: SessionIndex = { sessions: sessions.map(toIndexEntry) };
+      await Promise.all(sessions.map((session) => this.writeSession(session)));
+      await this.writeIndex(index);
+      return index;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+  }
+}
+
+async function atomicWriteJson(path: string, value: unknown) {
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.${crypto.randomUUID()}.tmp`;
+  try {
+    await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
+    await rename(tmp, path);
+  } catch (error) {
+    await unlink(tmp).catch(() => undefined);
+    throw error;
+  }
+}
+
+function toIndexEntry(session: SidecarSession): SessionIndexEntry {
+  return {
+    id: session.id,
+    title: session.title,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    model: session.model,
+    apiMode: session.apiMode,
+    messageCount: session.messages.length,
+    fileCount: session.files.length
+  };
 }
 
 function compactPatch<T extends Record<string, unknown>>(patch: T): Partial<T> {

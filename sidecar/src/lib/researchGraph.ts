@@ -15,6 +15,7 @@ export interface ResearchGraphNode {
   title: string;
   type: ResearchNodeType;
   file?: string;
+  fileExists?: boolean;
   summary?: string;
   status?: "active" | "draft" | "blocked" | "done";
   tags?: string[];
@@ -32,6 +33,12 @@ export interface ResearchGraph {
   rootId: string;
   nodes: ResearchGraphNode[];
   edges: ResearchGraphEdge[];
+  sourcePath?: string;
+  warnings?: string[];
+  ui?: {
+    expanded?: string[];
+    layout?: LayoutDirection;
+  };
 }
 
 export interface VisibleResearchGraph {

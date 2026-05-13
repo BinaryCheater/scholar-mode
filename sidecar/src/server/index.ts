@@ -4,13 +4,14 @@ import { fileURLToPath } from "node:url";
 import { buildContextPacket } from "../lib/context.js";
 import { readWorkspaceFile } from "../lib/files.js";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/prompt.js";
+import { loadResearchGraphManifest } from "../lib/researchGraphManifest.js";
 import { streamOpenAIReview } from "../lib/openaiProvider.js";
 import { JsonSessionStore } from "../lib/store.js";
 import { findInstructionFiles, loadTriggeredSkillFiles, scanWorkspaceSkills, selectSkillTriggers } from "../lib/workspaceMeta.js";
 import { loadConfig } from "./config.js";
 
 const config = loadConfig();
-const store = new JsonSessionStore(config.dataFile);
+const store = new JsonSessionStore(config.dataFile, { legacyFile: resolve(process.cwd(), "data", "sessions.json") });
 const app = express();
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDist = resolve(__dirname, "../../dist/client");
@@ -20,10 +21,11 @@ app.use(express.json({ limit: "4mb" }));
 app.get("/api/config", (_req, res) => {
   res.json({
     workspaceRoot: config.workspaceRoot,
+    graphManifestPath: config.graphManifestPath,
     defaultModel: config.defaultModel,
     openaiBaseURL: config.openaiBaseURL || null,
     apiMode: config.apiMode,
-    hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY)
+    hasOpenAIKey: Boolean(config.openaiAPIKey)
   });
 });
 
@@ -33,6 +35,44 @@ app.get("/api/workspace", async (_req, res, next) => {
       instructionFiles: (await findInstructionFiles(config.workspaceRoot)).map(({ path, bytes }) => ({ path, bytes })),
       skills: await scanWorkspaceSkills(config.workspaceRoot)
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/workspace/file", async (req, res, next) => {
+  try {
+    const path = String(req.query.path || "");
+    const snapshot = await readWorkspaceFile(config.workspaceRoot, path);
+    res.json(snapshot);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/workspace/raw", async (req, res, next) => {
+  try {
+    const path = String(req.query.path || "");
+    const snapshot = await readWorkspaceFile(config.workspaceRoot, path);
+    res.type(snapshot.mimeType).send(snapshot.content);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get(/^\/api\/workspace\/raw-path\/(.+)$/, async (req, res, next) => {
+  try {
+    const path = decodeURIComponent(String(req.params[0] || ""));
+    const snapshot = await readWorkspaceFile(config.workspaceRoot, path);
+    res.type(snapshot.mimeType).send(snapshot.content);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/research-graph", async (_req, res, next) => {
+  try {
+    res.json(await loadResearchGraphManifest(config.workspaceRoot, config.graphManifestPath));
   } catch (error) {
     next(error);
   }
@@ -101,6 +141,25 @@ app.post("/api/sessions/:id/messages/:messageId/edit", async (req, res, next) =>
   }
 });
 
+app.post("/api/sessions/:id/messages", async (req, res, next) => {
+  try {
+    const role = req.body?.role === "user" ? "user" : null;
+    const content = String(req.body?.content || "").trim();
+    if (!role || !content) {
+      res.status(400).json({ error: "A user message content is required." });
+      return;
+    }
+    const session = await store.addMessage(req.params.id, {
+      role,
+      content,
+      source: "manual"
+    });
+    res.status(201).json(session);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/sessions/:id/files", async (req, res, next) => {
   try {
     const snapshot = await readWorkspaceFile(config.workspaceRoot, req.body?.path || "");
@@ -146,7 +205,7 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
     const apiMode = config.apiMode;
     const manualContext = String(req.body?.manualContext ?? session.manualContext);
     const reviewPrompt = String(req.body?.reviewPrompt || session.reviewPrompt || DEFAULT_REVIEW_PROMPT);
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = config.openaiAPIKey;
 
     if (!apiKey) {
       res.status(400).json({ error: "OPENAI_API_KEY is not set." });
@@ -219,6 +278,7 @@ app.post("/api/sessions/:id/stream", async (req, res, next) => {
       model,
       contextPacket,
       workspaceRoot: config.workspaceRoot,
+      allowedWriteExtensions: config.allowedWriteExtensions,
       enableTools: Boolean(req.body?.enableTools) && apiMode === "chat",
       signal: abortController.signal,
       onToolCall(name, args) {

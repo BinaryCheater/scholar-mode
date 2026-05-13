@@ -17,6 +17,8 @@ describe("context packet", () => {
           path: "notes/experiment.md",
           content: "metric: unstable",
           bytes: 16,
+          format: "markdown",
+          mimeType: "text/markdown",
           addedAt: "2026-05-12T00:00:00.000Z"
         }
       ],

@@ -7,6 +7,8 @@ export interface FileSnapshot {
   path: string;
   content: string;
   bytes: number;
+  format: "markdown" | "html" | "text";
+  mimeType: string;
   addedAt: string;
 }
 
@@ -43,11 +45,15 @@ export interface ToolAdapter {
 
 export interface AppConfig {
   workspaceRoot: string;
+  sideDir: string;
   dataFile: string;
+  graphManifestPath: string;
   defaultModel: string;
+  openaiAPIKey?: string;
   openaiBaseURL?: string;
   apiMode: ApiMode;
   port: number;
+  allowedWriteExtensions: string[];
 }
 
 export interface WorkspaceSkill {

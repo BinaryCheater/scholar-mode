@@ -45,4 +45,29 @@ describe("workspace tools", () => {
 
     expect(content).toContain("# Research Review");
   });
+
+  it("writes only files allowed by the configured extension whitelist", async () => {
+    const root = join(process.cwd(), ".tmp-tests", crypto.randomUUID());
+    await mkdir(root, { recursive: true });
+
+    const tools = createWorkspaceTools(root, { allowedWriteExtensions: [".md", ".html"] });
+    const markdownResult = await tools.execute("write_workspace_file", {
+      path: "notes/claim.md",
+      content: "# Claim\n\nDraft body."
+    });
+    const htmlResult = await tools.execute("write_workspace_file", {
+      path: "notes/demo.html",
+      content: "<h1>Demo</h1>"
+    });
+
+    await expect(
+      tools.execute("write_workspace_file", {
+        path: "src/demo.ts",
+        content: "export const demo = true;"
+      })
+    ).rejects.toThrow(/not allowed|code/i);
+
+    expect(markdownResult).toContain("Wrote notes/claim.md");
+    expect(htmlResult).toContain("Wrote notes/demo.html");
+  });
 });

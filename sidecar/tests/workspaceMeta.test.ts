@@ -72,4 +72,28 @@ describe("workspace metadata", () => {
       path: "research-skill/SKILL.md"
     });
   });
+
+  it("deduplicates skills by name and prefers the top-level skills directory", async () => {
+    const root = join(process.cwd(), ".tmp-tests", crypto.randomUUID());
+    await mkdir(join(root, "sidecar/skill"), { recursive: true });
+    await mkdir(join(root, "skills/sidecar-thinking"), { recursive: true });
+    await writeFile(
+      join(root, "sidecar/skill", "SKILL.md"),
+      "---\nname: sidecar-thinking\ndescription: Package copy.\n---\n# Package copy"
+    );
+    await writeFile(
+      join(root, "skills/sidecar-thinking", "SKILL.md"),
+      "---\nname: sidecar-thinking\ndescription: Workspace copy.\n---\n# Workspace copy"
+    );
+
+    const skills = await scanWorkspaceSkills(root);
+
+    expect(skills).toEqual([
+      {
+        name: "sidecar-thinking",
+        description: "Workspace copy.",
+        path: "skills/sidecar-thinking/SKILL.md"
+      }
+    ]);
+  });
 });

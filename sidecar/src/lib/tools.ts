@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readWorkspaceFile, resolveWorkspacePath } from "./files.js";
+import { readWorkspaceFile, resolveWorkspacePath, writeWorkspaceFile } from "./files.js";
 import { loadSkillByReference } from "./workspaceMeta.js";
 
 const execFileAsync = promisify(execFile);
@@ -12,7 +12,14 @@ export interface WorkspaceToolCall {
   arguments: string | Record<string, unknown>;
 }
 
-export function createWorkspaceTools(workspaceRoot: string) {
+interface WorkspaceToolsOptions {
+  allowedWriteExtensions?: string[];
+}
+
+const DEFAULT_ALLOWED_WRITE_EXTENSIONS = [".md", ".markdown", ".html", ".htm"];
+
+export function createWorkspaceTools(workspaceRoot: string, options: WorkspaceToolsOptions = {}) {
+  const allowedWriteExtensions = options.allowedWriteExtensions?.length ? options.allowedWriteExtensions : DEFAULT_ALLOWED_WRITE_EXTENSIONS;
   return {
     definitions: [
       {
@@ -69,6 +76,26 @@ export function createWorkspaceTools(workspaceRoot: string) {
       {
         type: "function" as const,
         function: {
+          name: "write_workspace_file",
+          description:
+            "Write a UTF-8 workspace document. This tool is restricted to configured document extensions only and must not be used for source code files.",
+          parameters: {
+            type: "object",
+            properties: {
+              path: {
+                type: "string",
+                description: `Workspace-relative path to write. Allowed extensions: ${allowedWriteExtensions.join(", ")}.`
+              },
+              content: { type: "string", description: "Full file content to write." }
+            },
+            required: ["path", "content"],
+            additionalProperties: false
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
           name: "get_git_diff",
           description: "Return the current git diff for the workspace, optionally scoped to a path.",
           parameters: {
@@ -114,6 +141,12 @@ export function createWorkspaceTools(workspaceRoot: string) {
         const snapshots = await Promise.all(paths.map((path) => readWorkspaceFile(workspaceRoot, path)));
         return snapshots.map((snapshot) => `## ${snapshot.path}\n\n${snapshot.content}`).join("\n\n---\n\n");
       }
+      if (name === "write_workspace_file") {
+        const path = requireString(args.path, "path");
+        const content = requireContent(args.content);
+        const result = await writeWorkspaceFile(workspaceRoot, path, content, allowedWriteExtensions);
+        return `Wrote ${result.path} (${result.bytes} bytes).`;
+      }
       if (name === "get_git_diff") {
         const path = typeof args.path === "string" && args.path.trim() ? args.path.trim() : null;
         if (path) {
@@ -147,6 +180,13 @@ function requireString(value: unknown, name: string) {
   return value.trim();
 }
 
+function requireContent(value: unknown) {
+  if (typeof value !== "string") {
+    throw new Error("content is required.");
+  }
+  return value;
+}
+
 function requireStringArray(value: unknown, name: string) {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`${name} must be a non-empty array.`);
@@ -159,7 +199,7 @@ async function listFiles(root: string, dir = ""): Promise<string[]> {
   const entries = await readdir(full, { withFileTypes: true });
   const results: string[] = [];
   for (const entry of entries) {
-    if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "dist" || entry.name === "dist-server") {
+    if (entry.name === ".git" || entry.name === ".side" || entry.name === "node_modules" || entry.name === "dist" || entry.name === "dist-server") {
       continue;
     }
     const rel = dir ? `${dir}/${entry.name}` : entry.name;

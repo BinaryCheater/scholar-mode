@@ -17,8 +17,11 @@ Useful environment variables:
 - `OPENAI_API_KEY`: required for model calls.
 - `OPENAI_BASE_URL`: optional OpenAI-compatible endpoint, for example `https://api.deepseek.com`.
 - `SIDECAR_WORKSPACE_ROOT`: file-read root. Defaults to the parent of `sidecar`.
+- `SIDECAR_GRAPH_MANIFEST`: graph manifest path inside the workspace. Defaults to `research/graph.yaml`.
 - `SIDECAR_DEFAULT_MODEL`: defaults to `gpt-5.5`.
 - `PORT`: defaults to `4317`.
+
+The app can be embedded in a research repo or installed separately. In separate-install mode, always set `SIDECAR_WORKSPACE_ROOT` to the repo that contains the Markdown, HTML, `graph.yaml`, and `.side/` state.
 
 ## API Routing
 
@@ -51,9 +54,13 @@ When the auto-selected route is Chat Completions, enable workspace tools to let 
 - `list_workspace_files`
 - `read_workspace_file`
 - `read_workspace_files`
+- `write_workspace_file`
 - `get_git_diff`
+- `load_skill`
 
-All file paths are workspace-relative and constrained to `SIDECAR_WORKSPACE_ROOT`. Tool calls and tool results are shown in the chat and persisted in the session history before the final assistant answer.
+All file paths are workspace-relative and constrained to `SIDECAR_WORKSPACE_ROOT`. `write_workspace_file` defaults to Markdown and HTML only: `.md`, `.markdown`, `.html`, `.htm`. The allow-list is stored in `.side/config.json` under `tools.allowedWriteExtensions`.
+
+Tool calls and tool results are shown in the chat and persisted in the session history before the final assistant answer.
 
 The UI also lists workspace skills discovered from `SKILL.md` files. Skill handling is progressive:
 
@@ -68,10 +75,41 @@ The UI also lists workspace skills discovered from `SKILL.md` files. Skill handl
 With the sidecar server running:
 
 ```bash
-npm run codex:session -- --title "Skill review" --context "Codex summary..." --file SKILL.md --file README.md
+npm run codex:call -- --title "Skill review" --context "Codex summary..." --file SKILL.md --file README.md --question "What is the weakest assumption?"
 ```
 
-This creates a session, stores the explicit context, snapshots the listed files, and prints the URL.
+This creates a session, stores the explicit context, snapshots the listed files, optionally adds a manual user question, and prints the URL. The question is staged in the session; it does not call the model until the user continues in the web UI.
+
+For an explicit all-automatic path, Codex can ask the sidecar and stream the answer back:
+
+```bash
+npm run codex:ask -- --title "Skill review" --context "Codex summary..." --file SKILL.md --question "What should Codex do next?"
+```
+
+Use `codex:ask` when the user wants Codex to relay the answer directly. Use `codex:call` as the default integration path.
+
+## Research Graph
+
+The graph is loaded from the configured manifest, defaulting to `research/graph.yaml`.
+
+```yaml
+root: rq.main
+
+nodes:
+  - id: rq.main
+    title: Core research question
+    type: question
+    file: ./rq.main.md
+
+edges:
+  - from: rq.main
+    to: rq.theory
+    kind: decomposes
+```
+
+`graph.yaml` owns structure and UI hints. Markdown/HTML files own content. Node file links can be workspace-relative, or manifest-relative with `./`, `../`, or a bare filename. Returned paths are normalized to workspace-relative form.
+
+See `../docs/sidecar-usage.md` and `../docs/api.md` for the full project layout and API reference.
 
 ## Tests
 

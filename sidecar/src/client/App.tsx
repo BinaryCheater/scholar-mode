@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { groupToolMessages, type ToolExchange, type ToolRun } from "./toolMessages";
+import { MarkdownContent } from "./MarkdownContent";
 import { ResearchGraphView } from "./ResearchGraphView";
+import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, clampSidebarSplit, clampSidebarWidth } from "../lib/sidebarLayout";
+import type { ResearchGraph } from "../lib/researchGraph";
 import "./styles.css";
 
 type ApiMode = "responses" | "chat";
@@ -13,6 +14,8 @@ interface FileSnapshot {
   path: string;
   content: string;
   bytes: number;
+  format: "markdown" | "html" | "text";
+  mimeType: string;
   addedAt: string;
 }
 
@@ -52,6 +55,7 @@ interface SessionSummary {
 
 interface AppConfig {
   workspaceRoot: string;
+  graphManifestPath: string;
   defaultModel: string;
   openaiBaseURL: string | null;
   apiMode: ApiMode;
@@ -77,10 +81,15 @@ interface WorkspaceInfo {
   skills: WorkspaceSkill[];
 }
 
+const SIDEBAR_WIDTH_KEY = "thinking-sidecar-sidebar-width";
+const SIDEBAR_SPLIT_KEY = "thinking-sidecar-sidebar-split-v2";
+
 function App() {
   const [activeView, setActiveView] = useState<"chat" | "graph">("chat");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceInfo>({ instructionFiles: [], skills: [] });
+  const [researchGraph, setResearchGraph] = useState<ResearchGraph | null>(null);
+  const [graphError, setGraphError] = useState("");
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [active, setActive] = useState<SidecarSession | null>(null);
   const [message, setMessage] = useState("");
@@ -88,24 +97,45 @@ function App() {
   const [enableTools, setEnableTools] = useState(true);
   const [includeInstructionFiles, setIncludeInstructionFiles] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() => readStoredSidebarWidth());
+  const [sidebarSplit, setSidebarSplit] = useState(() => readStoredSidebarSplit());
   const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
   const [error, setError] = useState("");
   const abortControllers = useRef<Record<string, AbortController>>({});
+  const sidebarBodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void boot();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_SPLIT_KEY, String(sidebarSplit));
+  }, [sidebarSplit]);
+
   async function boot() {
     const cfg = await api<AppConfig>("/api/config");
     setConfig(cfg);
     setWorkspace(await api<WorkspaceInfo>("/api/workspace"));
+    await loadResearchGraph();
     const list = await api<SessionSummary[]>("/api/sessions");
     setSessions(list);
     if (list[0]) {
       await loadSession(list[0].id);
     } else {
       await createSession();
+    }
+  }
+
+  async function loadResearchGraph() {
+    try {
+      setGraphError("");
+      setResearchGraph(await api<ResearchGraph>("/api/research-graph"));
+    } catch (err) {
+      setGraphError(`Graph manifest: ${errorText(err)}`);
     }
   }
 
@@ -330,11 +360,23 @@ function App() {
 
   const activeBusy = Boolean(active && streams[active.id]?.busy);
   const appClassName = sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell";
+  const shellStyle = { "--workspace-sidebar-width": `${sidebarWidth}px` } as CSSProperties;
+  const sidebarBodyStyle = { "--session-list-percent": `${sidebarSplit}%` } as CSSProperties;
   const topbarTitle = activeView === "graph" ? "Research Graph" : active?.title || "No session";
   const topbarSubtitle =
     activeView === "graph"
-      ? `${config?.workspaceRoot || "Workspace"} · graph`
+      ? `${config?.workspaceRoot || "Workspace"} · ${config?.graphManifestPath || "graph"}`
       : `${active?.model || config?.defaultModel} · ${config?.apiMode || "auto"} · ${enableTools && config?.apiMode === "chat" ? "tools on" : "tools off"}`;
+  const viewTabs = (
+    <div className="view-tabs sidebar-view-tabs" aria-label="Workspace view">
+      <button className={activeView === "chat" ? "active" : ""} onClick={() => setActiveView("chat")}>
+        Chat
+      </button>
+      <button className={activeView === "graph" ? "active" : ""} onClick={() => setActiveView("graph")}>
+        Graph
+      </button>
+    </div>
+  );
   const topbar = (
     <header className="topbar">
       <div>
@@ -342,28 +384,55 @@ function App() {
         <span>{topbarSubtitle}</span>
       </div>
       <div className="topbar-actions">
-        <div className="view-tabs" aria-label="Workspace view">
-          <button className={activeView === "chat" ? "active" : ""} onClick={() => setActiveView("chat")}>
-            Chat
-          </button>
-          <button className={activeView === "graph" ? "active" : ""} onClick={() => setActiveView("graph")}>
-            Graph
-          </button>
-        </div>
-        <div className={config?.hasOpenAIKey ? "status ok" : "status warn"}>{config?.hasOpenAIKey ? "OPENAI_API_KEY set" : "OPENAI_API_KEY missing"}</div>
+        <div className={config?.hasOpenAIKey ? "status ok" : "status error"}>{config?.hasOpenAIKey ? "API OK" : "API ERROR"}</div>
       </div>
     </header>
   );
+  const sidebarResizeHandle = (
+    <SidebarResizeHandle
+      collapsed={sidebarCollapsed}
+      onResize={setSidebarWidth}
+      value={sidebarWidth}
+    />
+  );
+  const graphSidebarHeader = (
+    <div className="workspace-sidebar-header">
+      {viewTabs}
+      <div className="brand-row">
+        <div className="workspace-sidebar-title">
+          <h1>Research Graph</h1>
+          {!sidebarCollapsed && <p>{config?.workspaceRoot || "Loading workspace..."}</p>}
+        </div>
+        <div className="brand-actions">
+          <button className="icon-button" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} title="Toggle sidebar">
+            {sidebarCollapsed ? "›" : "‹"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   if (activeView === "graph") {
-    return <ResearchGraphView error={error} header={topbar} />;
+    return (
+      <ResearchGraphView
+        error={error || graphError}
+        graph={researchGraph || undefined}
+        header={topbar}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarHeader={graphSidebarHeader}
+        sidebarResizeHandle={sidebarResizeHandle}
+        sidebarWidth={sidebarWidth}
+      />
+    );
   }
 
   return (
-    <main className={appClassName}>
+    <main className={appClassName} style={shellStyle}>
       <aside className="sidebar">
+        <div className="workspace-sidebar-header">
+          {viewTabs}
           <div className="brand-row">
-            <div>
+            <div className="workspace-sidebar-title">
               <h1>Thinking Sidecar</h1>
               {!sidebarCollapsed && (
                 <>
@@ -381,9 +450,11 @@ function App() {
               </button>
             </div>
           </div>
+        </div>
+          {sidebarResizeHandle}
 
           {!sidebarCollapsed && (
-            <>
+            <div className="sidebar-body" ref={sidebarBodyRef} style={sidebarBodyStyle}>
               <div className="session-list">
                 {sessions.map((session) => (
                   <button
@@ -398,6 +469,7 @@ function App() {
                   </button>
                 ))}
               </div>
+              <SidebarSectionResizeHandle containerRef={sidebarBodyRef} onResize={setSidebarSplit} value={sidebarSplit} />
 
               {active && (
                 <section className="context-panel">
@@ -462,7 +534,7 @@ function App() {
                   </details>
                 </section>
               )}
-            </>
+            </div>
           )}
       </aside>
 
@@ -511,9 +583,7 @@ function App() {
                           </div>
                         </form>
                       ) : (
-                        <div className="message-body markdown-body">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayItem.message.content}</ReactMarkdown>
-                        </div>
+                        <MarkdownContent className="message-body" content={displayItem.message.content} />
                       )}
                     </>
                   </article>
@@ -604,17 +674,17 @@ function ToolExchangeMessage({ exchange }: { exchange: ToolExchange<SessionMessa
         </span>
         <span className="tool-summary-action">Details</span>
       </summary>
-      <div className="message-body markdown-body tool-details">
+      <div className="message-body tool-details">
         {exchange.call && (
           <section className="tool-detail-section">
             <h3>Call</h3>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{exchange.call.content}</ReactMarkdown>
+            <MarkdownContent content={exchange.call.content} />
           </section>
         )}
         {exchange.result && (
           <section className="tool-detail-section">
             <h3>Result</h3>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{exchange.result.content}</ReactMarkdown>
+            <MarkdownContent content={exchange.result.content} />
           </section>
         )}
       </div>
@@ -633,6 +703,128 @@ function skillRoutingMessage(payload: { triggers?: WorkspaceSkillTrigger[]; skil
       .join("\n")}`;
   }
   return `Triggered workspace skills:\n\n${(payload.skills || []).map((skill) => `- \`${skill.name}\` — ${skill.description || skill.path}`).join("\n")}`;
+}
+
+function SidebarResizeHandle({ collapsed, onResize, value }: { collapsed: boolean; onResize: (width: number) => void; value: number }) {
+  if (collapsed) return null;
+
+  function resizeTo(width: number) {
+    onResize(clampSidebarWidth(width, window.innerWidth));
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    document.body.classList.add("sidebar-resizing");
+
+    function handlePointerMove(moveEvent: PointerEvent) {
+      resizeTo(moveEvent.clientX);
+    }
+
+    function handlePointerUp() {
+      document.body.classList.remove("sidebar-resizing");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      resizeTo(value - (event.shiftKey ? 40 : 12));
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      resizeTo(value + (event.shiftKey ? 40 : 12));
+    }
+  }
+
+  return (
+    <div
+      aria-label="Resize sidebar"
+      aria-orientation="vertical"
+      aria-valuemax={MAX_SIDEBAR_WIDTH}
+      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuenow={value}
+      className="sidebar-resize-handle"
+      onKeyDown={handleKeyDown}
+      onPointerDown={handlePointerDown}
+      role="separator"
+      tabIndex={0}
+      title="Resize sidebar"
+    />
+  );
+}
+
+function SidebarSectionResizeHandle({ containerRef, onResize, value }: { containerRef: RefObject<HTMLDivElement | null>; onResize: (split: number) => void; value: number }) {
+  function resizeTo(clientY: number) {
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    onResize(clampSidebarSplit(((clientY - rect.top) / rect.height) * 100));
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    document.body.classList.add("sidebar-split-resizing");
+
+    function handlePointerMove(moveEvent: PointerEvent) {
+      resizeTo(moveEvent.clientY);
+    }
+
+    function handlePointerUp() {
+      document.body.classList.remove("sidebar-split-resizing");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      onResize(clampSidebarSplit(value - (event.shiftKey ? 10 : 4)));
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      onResize(clampSidebarSplit(value + (event.shiftKey ? 10 : 4)));
+    }
+  }
+
+  return (
+    <div
+      aria-label="Resize session and settings areas"
+      aria-orientation="horizontal"
+      aria-valuemax={76}
+      aria-valuemin={24}
+      aria-valuenow={value}
+      className="sidebar-section-resize-handle"
+      onKeyDown={handleKeyDown}
+      onPointerDown={handlePointerDown}
+      role="separator"
+      tabIndex={0}
+      title="Resize session and settings areas"
+    />
+  );
+}
+
+function readStoredSidebarWidth() {
+  const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+  return clampSidebarWidth(stored === null ? undefined : Number(stored), window.innerWidth);
+}
+
+function readStoredSidebarSplit() {
+  const stored = localStorage.getItem(SIDEBAR_SPLIT_KEY);
+  return clampSidebarSplit(stored === null ? undefined : Number(stored));
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

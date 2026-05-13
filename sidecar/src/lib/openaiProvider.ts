@@ -12,6 +12,7 @@ interface StreamInput {
   model: string;
   contextPacket: string;
   workspaceRoot: string;
+  allowedWriteExtensions?: string[];
   enableTools?: boolean;
   signal?: AbortSignal;
   onDelta(delta: string): void;
@@ -54,7 +55,7 @@ async function runChatCompletion(input: StreamInput, client: OpenAI) {
   }
 
   const messages: ChatCompletionMessageParam[] = [{ role: "user", content: input.contextPacket }];
-  const tools = createWorkspaceTools(input.workspaceRoot);
+  const tools = createWorkspaceTools(input.workspaceRoot, { allowedWriteExtensions: input.allowedWriteExtensions });
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
     const response = await client.chat.completions.create(

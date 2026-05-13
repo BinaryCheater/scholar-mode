@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Background,
   Controls,
@@ -26,6 +26,7 @@ import {
   type ResearchGraphEdge,
   type ResearchNodeType
 } from "../lib/researchGraph";
+import { MarkdownContent } from "./MarkdownContent";
 import { sampleResearchGraph } from "./researchGraphData";
 
 type GraphNodeData = {
@@ -43,18 +44,68 @@ type ResearchFlowNode = Node<GraphNodeData, "research">;
 
 const nodeTypes = { research: ResearchNodeCard };
 
-export function ResearchGraphView({ error, graph = sampleResearchGraph, header }: { error?: string; graph?: ResearchGraph; header?: ReactNode }) {
+type FilePreviewState =
+  | { status: "idle" }
+  | { status: "loading"; path: string; title: string }
+  | { status: "ready"; path: string; title: string; content: string; bytes: number; format: FilePreviewFormat; mimeType: string }
+  | { status: "error"; path: string; title: string; message: string };
+type PreviewDock = "right" | "bottom";
+type FilePreviewFormat = "markdown" | "html" | "text";
+
+export function ResearchGraphView({
+  error,
+  graph = sampleResearchGraph,
+  header,
+  sidebarCollapsed = false,
+  sidebarHeader,
+  sidebarResizeHandle,
+  sidebarWidth
+}: {
+  error?: string;
+  graph?: ResearchGraph;
+  header?: ReactNode;
+  sidebarCollapsed?: boolean;
+  sidebarHeader?: ReactNode;
+  sidebarResizeHandle?: ReactNode;
+  sidebarWidth?: number;
+}) {
   return (
     <ReactFlowProvider>
-      <ResearchGraphCanvas error={error} graph={graph} header={header} />
+      <ResearchGraphCanvas
+        error={error}
+        graph={graph}
+        header={header}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarHeader={sidebarHeader}
+        sidebarResizeHandle={sidebarResizeHandle}
+        sidebarWidth={sidebarWidth}
+      />
     </ReactFlowProvider>
   );
 }
 
-function ResearchGraphCanvas({ error, graph, header }: { error?: string; graph: ResearchGraph; header?: ReactNode }) {
-  const [expandedIds, setExpandedIds] = useState(() => new Set([graph.rootId, "rq.theory", "rq.method", "rq.evidence"]));
+function ResearchGraphCanvas({
+  error,
+  graph,
+  header,
+  sidebarCollapsed,
+  sidebarHeader,
+  sidebarResizeHandle,
+  sidebarWidth
+}: {
+  error?: string;
+  graph: ResearchGraph;
+  header?: ReactNode;
+  sidebarCollapsed: boolean;
+  sidebarHeader?: ReactNode;
+  sidebarResizeHandle?: ReactNode;
+  sidebarWidth?: number;
+}) {
+  const [expandedIds, setExpandedIds] = useState(() => defaultExpandedIds(graph));
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<GraphViewMode>("compact");
+  const [preview, setPreview] = useState<FilePreviewState>({ status: "idle" });
+  const [previewDock, setPreviewDock] = useState<PreviewDock>("right");
   const { fitView, setCenter } = useReactFlow<ResearchFlowNode, Edge>();
   const graphIndex = useMemo(() => buildGraphIndex(graph), [graph]);
   const searchResults = useMemo(() => graphIndex.search(query), [graphIndex, query]);
@@ -62,6 +113,10 @@ function ResearchGraphCanvas({ error, graph, header }: { error?: string; graph: 
   const layout = useMemo(() => layoutResearchGraph(visible, { direction: "LR", mode }), [mode, visible]);
   const matchedIds = useMemo(() => new Set(searchResults.map((node) => node.id)), [searchResults]);
   const expandableIds = useMemo(() => getExpandableNodeIds(graph), [graph]);
+
+  useEffect(() => {
+    setExpandedIds(defaultExpandedIds(graph));
+  }, [graph]);
 
   const flowNodes = useMemo<ResearchFlowNode[]>(
     () =>
@@ -143,69 +198,107 @@ function ResearchGraphCanvas({ error, graph, header }: { error?: string; graph: 
     setCenter(node.position.x + offset, node.position.y + offset, { zoom: mode === "compact" ? 1.55 : 1.08, duration: 280 });
   }
 
+  async function openNodePreview(node: LayoutResearchNode) {
+    if (!node.file) {
+      setPreview({ status: "error", path: node.id, title: node.title, message: "This graph node does not have a file path." });
+      return;
+    }
+
+    setPreview({ status: "loading", path: node.file, title: node.title });
+    try {
+      const snapshot = await api<FilePreviewSnapshot>(`/api/workspace/file?path=${encodeURIComponent(node.file)}`);
+      setPreview({
+        status: "ready",
+        path: snapshot.path,
+        title: node.title,
+        content: snapshot.content,
+        bytes: snapshot.bytes,
+        format: snapshot.format,
+        mimeType: snapshot.mimeType
+      });
+    } catch (error) {
+      setPreview({ status: "error", path: node.file, title: node.title, message: errorText(error) });
+    }
+  }
+
   return (
-    <main className="app-shell graph-view">
+    <main className={sidebarCollapsed ? "app-shell graph-view sidebar-collapsed" : "app-shell graph-view"} style={sidebarWidth ? ({ "--workspace-sidebar-width": `${sidebarWidth}px` } as CSSProperties) : undefined}>
       <aside className="graph-index-panel">
-        <div className="graph-panel-header">
-          <div>
-            <strong>Research Graph</strong>
-            <span>
-              {visible.nodes.length}/{graph.nodes.length} nodes · {visible.edges.length} edges
-            </span>
-          </div>
-          <button className="secondary-button compact" onClick={() => fitView({ padding: 0.1, maxZoom: mode === "compact" ? 1.45 : 1.05, duration: 260 })}>
-            Fit
-          </button>
-        </div>
+        {sidebarHeader}
+        {sidebarResizeHandle}
+        {!sidebarCollapsed && (
+          <>
+            <div className="graph-panel-header">
+              <div>
+                <strong>Overview</strong>
+                <span>
+                  {visible.nodes.length}/{graph.nodes.length} nodes · {visible.edges.length} edges
+                </span>
+              </div>
+              <button className="secondary-button compact" onClick={() => fitView({ padding: 0.1, maxZoom: mode === "compact" ? 1.45 : 1.05, duration: 260 })}>
+                Fit
+              </button>
+            </div>
 
-        <label className="graph-search">
-          Index
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, id, path, tag..." />
-        </label>
+            <label className="graph-search">
+              Search
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, id, path, tag..." />
+            </label>
 
-        <div className="graph-layout-toggle" aria-label="Graph display mode">
-          <button className={mode === "compact" ? "active" : ""} onClick={() => setMode("compact")}>
-            Compact
-          </button>
-          <button className={mode === "full" ? "active" : ""} onClick={() => setMode("full")}>
-            Full
-          </button>
-        </div>
+            <div className="graph-layout-toggle" aria-label="Graph display mode">
+              <button className={mode === "compact" ? "active" : ""} onClick={() => setMode("compact")}>
+                Compact
+              </button>
+              <button className={mode === "full" ? "active" : ""} onClick={() => setMode("full")}>
+                Full
+              </button>
+            </div>
 
-        <div className="graph-actions" aria-label="Graph expansion controls">
-          <button onClick={expandAll}>Expand all</button>
-          <button onClick={collapseAll}>Collapse all</button>
-        </div>
+            <div className="graph-actions" aria-label="Graph expansion controls">
+              <button onClick={expandAll}>Expand all</button>
+              <button onClick={collapseAll}>Collapse all</button>
+            </div>
 
-        <div className="graph-index-list">
-          {layout.nodes.map((node) => (
-            <button key={node.id} className={matchedIds.has(node.id) && query.trim() ? "graph-index-item match" : "graph-index-item"} onClick={() => focusNode(node)}>
-              <span className={`node-type type-${node.type}`}>{node.type}</span>
-              <strong>{node.title}</strong>
-              <small>{node.file || node.id}</small>
-            </button>
-          ))}
-        </div>
+            <div className="graph-index-list">
+              {layout.nodes.map((node) => (
+                <div key={node.id} className={matchedIds.has(node.id) && query.trim() ? "graph-index-item match" : "graph-index-item"}>
+                  <button className="graph-index-focus" onClick={() => focusNode(node)}>
+                    <span className={`node-type type-${node.type}`}>{node.type}</span>
+                    <strong>{node.title}</strong>
+                    <small>{node.file || node.id}</small>
+                  </button>
+                  <button className="graph-index-open" onClick={() => void openNodePreview(node)} disabled={!node.file || node.fileExists === false} title={previewButtonTitle(node)}>
+                    {node.fileExists === false ? "Missing" : "Open"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </aside>
 
       <section className="chat-pane graph-active">
         {header}
         {error && <div className="error-banner">{error}</div>}
-        <div className="graph-canvas">
-          <ReactFlow
-            nodes={flowNodes}
-            edges={flowEdges}
-            nodeTypes={nodeTypes}
-            minZoom={0.25}
-            maxZoom={1.7}
-            fitView
-            fitViewOptions={{ padding: 0.1, maxZoom: mode === "compact" ? 1.45 : 1.05 }}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background gap={28} size={1} color="#dce3ea" />
-            <Controls position="bottom-right" />
-          </ReactFlow>
-          <GraphOverview layout={layout} mode={mode} />
+        <div className={preview.status === "idle" ? "graph-workspace" : `graph-workspace preview-${previewDock}`}>
+          <div className="graph-canvas">
+            <ReactFlow
+              nodes={flowNodes}
+              edges={flowEdges}
+              nodeTypes={nodeTypes}
+              minZoom={0.25}
+              maxZoom={1.7}
+              fitView
+              fitViewOptions={{ padding: 0.1, maxZoom: mode === "compact" ? 1.45 : 1.05 }}
+              onNodeClick={(_, node) => void openNodePreview(node.data.item)}
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background gap={28} size={1} color="#dce3ea" />
+              <Controls position="bottom-right" />
+            </ReactFlow>
+            <GraphOverview layout={layout} mode={mode} />
+          </div>
+          <FilePreviewPanel dock={previewDock} onClose={() => setPreview({ status: "idle" })} onDockChange={setPreviewDock} preview={preview} />
         </div>
       </section>
     </main>
@@ -219,7 +312,7 @@ function ResearchNodeCard({ data, selected }: NodeProps<ResearchFlowNode>) {
 
   return (
     <article
-      className={selected ? `research-node ${data.mode} selected type-${item.type}` : `research-node ${data.mode} type-${item.type}`}
+      className={selected ? nodeClassName(item, data.mode, "selected") : nodeClassName(item, data.mode)}
       title={`${item.title}\n${item.type}${item.status ? ` · ${item.status}` : ""}\n${item.file || item.id}${item.summary ? `\n${item.summary}` : ""}`}
     >
       <Handle type="target" position={Position.Left} className="node-handle node-handle-left" />
@@ -232,12 +325,26 @@ function ResearchNodeCard({ data, selected }: NodeProps<ResearchFlowNode>) {
         <CompactNodeContent item={item} />
       )}
       {canCollapse && (
-        <button className="node-toggle nodrag" onClick={() => data.onToggle(item.id)} title={data.expanded ? "Collapse node" : "Expand node"}>
+        <button
+          className="node-toggle nodrag"
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onToggle(item.id);
+          }}
+          title={data.expanded ? "Collapse node" : "Expand node"}
+        >
           {data.expanded ? "−" : "+"}
         </button>
       )}
       {canBranch && (
-        <button className="node-branch-toggle nodrag" onClick={() => data.onExpandBranch(item.id)} title="Expand full branch">
+        <button
+          className="node-branch-toggle nodrag"
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onExpandBranch(item.id);
+          }}
+          title="Expand full branch"
+        >
           ↧
         </button>
       )}
@@ -253,6 +360,62 @@ function ResearchNodeCard({ data, selected }: NodeProps<ResearchFlowNode>) {
       </div>
     </article>
   );
+}
+
+function FilePreviewPanel({ dock, onClose, onDockChange, preview }: { dock: PreviewDock; onClose: () => void; onDockChange: (dock: PreviewDock) => void; preview: FilePreviewState }) {
+  if (preview.status === "idle") return null;
+
+  return (
+    <aside className="file-preview-panel">
+      <header>
+        <div>
+          <strong>{preview.title}</strong>
+          <span>{preview.path}</span>
+        </div>
+        <div className="file-preview-actions">
+          <button className={dock === "right" ? "active" : ""} onClick={() => onDockChange("right")} title="Dock right">
+            Right
+          </button>
+          <button className={dock === "bottom" ? "active" : ""} onClick={() => onDockChange("bottom")} title="Dock bottom">
+            Bottom
+          </button>
+          <button onClick={onClose} title="Close preview">
+            ×
+          </button>
+        </div>
+      </header>
+      {preview.status === "loading" && <div className="file-preview-state">Loading file...</div>}
+      {preview.status === "error" && <div className="file-preview-state error">{preview.message}</div>}
+      {preview.status === "ready" && (
+        <>
+          <div className="file-preview-meta">
+            {preview.bytes.toLocaleString()} bytes · {preview.mimeType}
+          </div>
+          <FilePreviewContent preview={preview} />
+        </>
+      )}
+    </aside>
+  );
+}
+
+function FilePreviewContent({ preview }: { preview: Extract<FilePreviewState, { status: "ready" }> }) {
+  if (preview.format === "markdown") {
+    return <MarkdownContent basePath={preview.path} className="file-preview-markdown" content={preview.content} />;
+  }
+
+  if (preview.format === "html") {
+    return <iframe className="file-preview-html" sandbox="allow-same-origin" srcDoc={htmlWithWorkspaceBase(preview.path, preview.content)} title={preview.title} />;
+  }
+
+  return <pre>{preview.content}</pre>;
+}
+
+interface FilePreviewSnapshot {
+  path: string;
+  content: string;
+  bytes: number;
+  format: FilePreviewFormat;
+  mimeType: string;
 }
 
 function CompactNodeContent({ item }: { item: LayoutResearchNode }) {
@@ -275,6 +438,7 @@ function FullNodeContent({ item, highlighted }: { item: LayoutResearchNode; high
       {item.summary && <p>{item.summary}</p>}
       <footer>
         <span>{item.file || item.id}</span>
+        {item.fileExists === false && <strong>missing file</strong>}
         {highlighted && <strong>match</strong>}
       </footer>
     </>
@@ -283,6 +447,29 @@ function FullNodeContent({ item, highlighted }: { item: LayoutResearchNode; high
 
 function edgeLabel(edge: ResearchGraphEdge) {
   return edge.label || edge.kind.replaceAll("_", " ");
+}
+
+function htmlWithWorkspaceBase(path: string, content: string) {
+  const baseDir = path.split("/").slice(0, -1).map(encodeURIComponent).join("/");
+  const base = `<base href="/api/workspace/raw-path/${baseDir ? `${baseDir}/` : ""}">`;
+  if (/<head[\s>]/i.test(content)) {
+    return content.replace(/<head([^>]*)>/i, `<head$1>${base}`);
+  }
+  return `${base}${content}`;
+}
+
+function defaultExpandedIds(graph: ResearchGraph) {
+  return new Set(graph.ui?.expanded?.length ? graph.ui.expanded : [graph.rootId]);
+}
+
+function nodeClassName(item: LayoutResearchNode, mode: GraphViewMode, extra = "") {
+  return ["research-node", mode, `type-${item.type}`, item.fileExists === false ? "missing-file" : "", extra].filter(Boolean).join(" ");
+}
+
+function previewButtonTitle(node: LayoutResearchNode) {
+  if (!node.file) return "No file attached";
+  if (node.fileExists === false) return "File is referenced by graph.yaml but does not exist yet";
+  return "Preview file";
 }
 
 function compactEdgeLabel(edge: ResearchGraphEdge) {
@@ -340,4 +527,17 @@ function edgeColor(kind: ResearchGraphEdge["kind"]) {
   if (kind === "contradicts") return "#c9352b";
   if (kind === "leads_to") return "#8a6a15";
   return "#9aa3ad";
+}
+
+async function api<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || response.statusText);
+  }
+  return response.json() as Promise<T>;
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown error.";
 }
