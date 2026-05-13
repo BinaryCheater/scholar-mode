@@ -3,6 +3,8 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { createWorkspaceTools } from "./tools.js";
 import type { ApiMode } from "./types.js";
 
+const MAX_TOOL_ITERATIONS = 6;
+
 interface StreamInput {
   apiKey: string;
   baseURL?: string;
@@ -54,7 +56,7 @@ async function runChatCompletion(input: StreamInput, client: OpenAI) {
   const messages: ChatCompletionMessageParam[] = [{ role: "user", content: input.contextPacket }];
   const tools = createWorkspaceTools(input.workspaceRoot);
 
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
     const response = await client.chat.completions.create(
       {
         model: input.model,
@@ -92,7 +94,14 @@ async function runChatCompletion(input: StreamInput, client: OpenAI) {
     }
   }
 
-  throw new Error("Tool loop exceeded the maximum number of iterations.");
+  await streamFinalChatAnswer(client, input, [
+    ...messages,
+    {
+      role: "system",
+      content:
+        "The workspace tool-call limit has been reached. Stop calling tools and answer from the evidence already gathered. If the evidence is insufficient, say exactly what is missing."
+    }
+  ]);
 }
 
 async function streamFinalChatAnswer(client: OpenAI, input: StreamInput, messages: ChatCompletionMessageParam[]) {

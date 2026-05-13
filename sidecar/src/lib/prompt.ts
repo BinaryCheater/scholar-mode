@@ -23,6 +23,8 @@ Tools:
 - Use workspace tools when the answer depends on files, git diff, or available workspace structure.
 - Use load_skill when a candidate workspace skill may apply but its full instructions were not loaded.
 - Prefer reading/listing only what is needed. Do not browse the entire tree unless the user asks for broad inventory.
+- When multiple files are likely needed, use read_workspace_files once instead of repeated read_workspace_file calls.
+- Stop gathering files once you have enough evidence to answer; if the remaining context is missing, state the gap instead of continuing tool calls.
 - Report tool calls and results plainly in the conversation flow.
 - If tools are unavailable or insufficient, say what context is missing.
 

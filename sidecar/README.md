@@ -50,6 +50,7 @@ When the auto-selected route is Chat Completions, enable workspace tools to let 
 
 - `list_workspace_files`
 - `read_workspace_file`
+- `read_workspace_files`
 - `get_git_diff`
 
 All file paths are workspace-relative and constrained to `SIDECAR_WORKSPACE_ROOT`. Tool calls and tool results are shown in the chat and persisted in the session history before the final assistant answer.

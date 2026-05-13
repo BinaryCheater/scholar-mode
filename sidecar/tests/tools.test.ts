@@ -17,6 +17,21 @@ describe("workspace tools", () => {
     expect(read).toContain("claim body");
   });
 
+  it("reads multiple workspace files in one tool call", async () => {
+    const root = join(process.cwd(), ".tmp-tests", crypto.randomUUID());
+    await mkdir(join(root, "notes"), { recursive: true });
+    await writeFile(join(root, "notes", "one.md"), "first body");
+    await writeFile(join(root, "notes", "two.md"), "second body");
+
+    const tools = createWorkspaceTools(root);
+    const read = await tools.execute("read_workspace_files", { paths: ["notes/one.md", "notes/two.md"] });
+
+    expect(read).toContain("## notes/one.md");
+    expect(read).toContain("first body");
+    expect(read).toContain("## notes/two.md");
+    expect(read).toContain("second body");
+  });
+
   it("loads discovered skill instructions by name", async () => {
     const root = join(process.cwd(), ".tmp-tests", crypto.randomUUID());
     await mkdir(join(root, "skills", "research"), { recursive: true });

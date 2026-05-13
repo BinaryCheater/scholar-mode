@@ -47,6 +47,28 @@ export function createWorkspaceTools(workspaceRoot: string) {
       {
         type: "function" as const,
         function: {
+          name: "read_workspace_files",
+          description:
+            "Read several UTF-8 text files by workspace-relative path in one call. Prefer this over repeated single-file reads when comparing or reviewing multiple files.",
+          parameters: {
+            type: "object",
+            properties: {
+              paths: {
+                type: "array",
+                items: { type: "string" },
+                minItems: 1,
+                maxItems: 8,
+                description: "Workspace-relative paths to read."
+              }
+            },
+            required: ["paths"],
+            additionalProperties: false
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
           name: "get_git_diff",
           description: "Return the current git diff for the workspace, optionally scoped to a path.",
           parameters: {
@@ -87,6 +109,11 @@ export function createWorkspaceTools(workspaceRoot: string) {
         const snapshot = await readWorkspaceFile(workspaceRoot, path);
         return snapshot.content;
       }
+      if (name === "read_workspace_files") {
+        const paths = requireStringArray(args.paths, "paths").slice(0, 8);
+        const snapshots = await Promise.all(paths.map((path) => readWorkspaceFile(workspaceRoot, path)));
+        return snapshots.map((snapshot) => `## ${snapshot.path}\n\n${snapshot.content}`).join("\n\n---\n\n");
+      }
       if (name === "get_git_diff") {
         const path = typeof args.path === "string" && args.path.trim() ? args.path.trim() : null;
         if (path) {
@@ -118,6 +145,13 @@ function requireString(value: unknown, name: string) {
     throw new Error(`${name} is required.`);
   }
   return value.trim();
+}
+
+function requireStringArray(value: unknown, name: string) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${name} must be a non-empty array.`);
+  }
+  return value.map((item, index) => requireString(item, `${name}[${index}]`));
 }
 
 async function listFiles(root: string, dir = ""): Promise<string[]> {

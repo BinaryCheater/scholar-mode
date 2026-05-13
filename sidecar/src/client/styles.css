@@ -351,6 +351,7 @@ textarea {
   line-height: 1.58;
 }
 
+.tool-run-card,
 .tool-card {
   border: 1px solid #e5e5e5;
   border-radius: 12px;
@@ -359,6 +360,7 @@ textarea {
   overflow: hidden;
 }
 
+.tool-run-card summary,
 .tool-card summary {
   display: flex;
   align-items: center;
@@ -370,10 +372,19 @@ textarea {
   list-style: none;
 }
 
+.tool-run-card > summary {
+  min-height: 42px;
+}
+
 .tool-card summary::-webkit-details-marker {
   display: none;
 }
 
+.tool-run-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-run-card summary::before,
 .tool-card summary::before {
   content: "›";
   color: #697077;
@@ -382,6 +393,7 @@ textarea {
   transition: transform 120ms ease;
 }
 
+.tool-run-card[open] > summary::before,
 .tool-card[open] summary::before {
   transform: rotate(90deg);
 }
@@ -399,6 +411,13 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+
+.tool-summary-main small {
+  color: #697077;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .tool-chip {
@@ -422,14 +441,37 @@ textarea {
   font-weight: 650;
 }
 
-.tool-card[open] .tool-summary-action {
+.tool-run-card[open] > summary .tool-summary-action,
+.tool-card[open] > summary .tool-summary-action {
   color: #10a37f;
+}
+
+.tool-run-details {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #e5e5e5;
+  padding: 10px;
+  background: #fff;
 }
 
 .tool-details {
   border-top: 1px solid #e5e5e5;
   padding: 12px 14px;
   background: #fff;
+}
+
+.tool-detail-section + .tool-detail-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #ececf1;
+}
+
+.tool-detail-section h3 {
+  margin: 0 0 8px;
+  color: #697077;
+  font-size: 11px;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .markdown-body p,

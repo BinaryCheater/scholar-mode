@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { groupToolMessages, type ToolExchange, type ToolRun } from "./toolMessages";
 import "./styles.css";
 
 type ApiMode = "responses" | "chat";
@@ -304,12 +305,12 @@ function App() {
     });
   }
 
-  const visibleMessages = useMemo(() => {
+  const displayItems = useMemo(() => {
     if (!active) return [];
     const base = active.messages;
     const activeStream = streams[active.id];
     if (activeStream?.text) {
-      return [
+      return groupToolMessages([
         ...base,
         {
           id: "streaming",
@@ -320,9 +321,9 @@ function App() {
           model: active.model,
           apiMode: active.apiMode
         }
-      ];
+      ]);
     }
-    return base;
+    return groupToolMessages(base);
   }, [active, streams]);
 
   const activeBusy = Boolean(active && streams[active.id]?.busy);
@@ -448,36 +449,36 @@ function App() {
         {error && <div className="error-banner">{error}</div>}
 
         <div className="messages">
-          {visibleMessages.length === 0 && (
+          {displayItems.length === 0 && (
             <div className="empty-state">
               <h2>Start with a claim, plan, or uncertainty.</h2>
               <p>Add explicit context on the left, then ask the sidecar to challenge the reasoning.</p>
             </div>
           )}
-          {visibleMessages.map((item) => (
-            <article key={item.id} className={`message ${item.role}`}>
-              {item.role === "tool" ? (
-                <ToolMessage item={item} />
-              ) : (
+          {displayItems.map((displayItem) =>
+            displayItem.kind === "tool-run" ? (
+              <ToolRunMessage key={displayItem.run.id} run={displayItem.run} />
+            ) : (
+              <article key={displayItem.message.id} className={`message ${displayItem.message.role}`}>
                 <>
                   <div className="message-meta">
-                    <span>{messageLabel(item)}</span>
-                    {item.model && <small>{item.model}</small>}
-                    {item.role === "user" && !activeBusy && (
-                      <button className="text-button" onClick={() => setEditing({ id: item.id, content: item.content })}>
+                    <span>{messageLabel(displayItem.message)}</span>
+                    {displayItem.message.model && <small>{displayItem.message.model}</small>}
+                    {displayItem.message.role === "user" && !activeBusy && (
+                      <button className="text-button" onClick={() => setEditing({ id: displayItem.message.id, content: displayItem.message.content })}>
                         Edit
                       </button>
                     )}
                   </div>
-                  {editing?.id === item.id ? (
+                  {editing?.id === displayItem.message.id ? (
                     <form
                       className="edit-form"
                       onSubmit={(event) => {
                         event.preventDefault();
-                        void editUserMessage(item.id, editing.content);
+                        void editUserMessage(displayItem.message.id, editing.content);
                       }}
                     >
-                      <textarea value={editing.content} onChange={(event) => setEditing({ id: item.id, content: event.target.value })} />
+                      <textarea value={editing.content} onChange={(event) => setEditing({ id: displayItem.message.id, content: event.target.value })} />
                       <div className="composer-actions">
                         <button type="button" className="secondary-button" onClick={() => setEditing(null)}>
                           Cancel
@@ -487,13 +488,13 @@ function App() {
                     </form>
                   ) : (
                     <div className="message-body markdown-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayItem.message.content}</ReactMarkdown>
                     </div>
                   )}
                 </>
-              )}
-            </article>
-          ))}
+              </article>
+            )
+          )}
         </div>
 
         <form className="composer" onSubmit={sendMessage}>
@@ -542,31 +543,58 @@ function messageLabel(item: SessionMessage) {
   return "You";
 }
 
-function ToolMessage({ item }: { item: SessionMessage }) {
-  const summary = toolSummary(item);
+function ToolRunMessage({ run }: { run: ToolRun<SessionMessage> }) {
+  const completed = run.exchanges.filter((exchange) => exchange.result).length;
+  return (
+    <article className="message tool">
+      <details className="tool-run-card">
+        <summary>
+          <span className="tool-summary-main">
+            <span className="tool-chip result">Tools</span>
+            <strong>Workspace tools</strong>
+            <small>
+              {run.exchanges.length} call{run.exchanges.length === 1 ? "" : "s"}
+              {completed > 0 ? ` · ${completed} result${completed === 1 ? "" : "s"}` : ""}
+            </small>
+          </span>
+          <span className="tool-summary-action">Details</span>
+        </summary>
+        <div className="tool-run-details">
+          {run.exchanges.map((exchange) => (
+            <ToolExchangeMessage key={exchange.id} exchange={exchange} />
+          ))}
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function ToolExchangeMessage({ exchange }: { exchange: ToolExchange<SessionMessage> }) {
   return (
     <details className="tool-card">
       <summary>
         <span className="tool-summary-main">
-          <span className={summary.kind === "Result" ? "tool-chip result" : "tool-chip"}>{summary.kind}</span>
-          <strong>{summary.name}</strong>
+          <span className={exchange.result ? "tool-chip result" : "tool-chip"}>{exchange.result ? "Done" : "Call"}</span>
+          <strong>{exchange.name}</strong>
         </span>
         <span className="tool-summary-action">Details</span>
       </summary>
       <div className="message-body markdown-body tool-details">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+        {exchange.call && (
+          <section className="tool-detail-section">
+            <h3>Call</h3>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{exchange.call.content}</ReactMarkdown>
+          </section>
+        )}
+        {exchange.result && (
+          <section className="tool-detail-section">
+            <h3>Result</h3>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{exchange.result.content}</ReactMarkdown>
+          </section>
+        )}
       </div>
     </details>
   );
-}
-
-function toolSummary(item: SessionMessage) {
-  const isResult = item.content.startsWith("Result from");
-  const name = item.toolName || item.content.match(/`([^`]+)`/)?.[1] || "workspace tool";
-  return {
-    kind: isResult ? "Result" : "Call",
-    name
-  };
 }
 
 function skillRoutingMessage(payload: { triggers?: WorkspaceSkillTrigger[]; skills?: WorkspaceSkill[]; loadedSkills?: Array<{ path: string; bytes: number }> }) {
