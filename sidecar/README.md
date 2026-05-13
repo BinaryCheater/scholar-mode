@@ -13,8 +13,9 @@ Install the app once under a user directory and point it at any workspace:
 ```bash
 cd ~/Applications/thinking-sidecar/sidecar
 npm install
+npm run build
 npm run codex:install -- --workspace ~/Research/project-a
-SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
+SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm start
 ```
 
 ### Workspace-Local Install
@@ -24,11 +25,15 @@ Keep the app inside the research workspace:
 ```bash
 cd sidecar
 cp .env.example .env
+npm install
+npm run build
 npm run codex:install -- --workspace ..
-OPENAI_API_KEY=sk-... npm run dev
+OPENAI_API_KEY=sk-... npm start
 ```
 
 Open `http://localhost:4317`.
+
+Use `npm run dev` only when editing the Sidecar source. It runs the TypeScript server through `tsx` and serves the Vite client in development mode. For normal use, build once and run `npm start`.
 
 Useful environment variables:
 
@@ -57,6 +62,41 @@ Useful options:
 - `--no-graph`
 - `--no-skills`
 - `--force`
+
+## CLI Commands
+
+All CLI commands are wrappers around `scripts/codex-sidecar.mjs`.
+
+Initialize a workspace:
+
+```bash
+npm run codex:install -- --workspace /path/to/workspace
+```
+
+Create a session and stage context without calling the model:
+
+```bash
+npm run codex:call -- --title "Review" --context "Codex summary..." --file research/graph.yaml --question "What is the weakest assumption?"
+```
+
+Create a session and stream the model answer to stdout:
+
+```bash
+npm run codex:ask -- --title "Review" --context "Codex summary..." --question "What should Codex do next?"
+```
+
+Create a plain session:
+
+```bash
+npm run codex:session -- --title "Review" --context "Codex summary..."
+```
+
+Direct invocation is equivalent:
+
+```bash
+node scripts/codex-sidecar.mjs install --workspace /path/to/workspace
+node scripts/codex-sidecar.mjs call --url http://localhost:4317 --title "Review"
+```
 
 ## API Routing
 

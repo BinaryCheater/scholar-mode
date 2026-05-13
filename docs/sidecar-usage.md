@@ -32,13 +32,15 @@ Initialize any workspace:
 
 ```bash
 cd ~/Applications/thinking-sidecar/sidecar
+npm install
+npm run build
 npm run codex:install -- --workspace ~/Research/project-a
 ```
 
 Run the app for that workspace:
 
 ```bash
-SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
+SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm start
 ```
 
 This keeps the app code out of the research repo while storing `.side/`, skills, graph, sessions, and config in the research workspace.
@@ -61,13 +63,16 @@ Run:
 ```bash
 cd sidecar
 npm install
+npm run build
 npm run codex:install -- --workspace ..
-npm run dev
+npm start
 ```
 
 The default workspace root is the parent of `sidecar`, so this layout works without `SIDECAR_WORKSPACE_ROOT`.
 
 In both modes, graph paths, file previews, tools, session state, and `.side/config.json` apply to the workspace root, not necessarily to the app install directory.
+
+`npm run dev` is for developing Sidecar itself. Normal use is `npm run build` once, then `npm start`.
 
 ## Workspace State
 
@@ -123,6 +128,26 @@ Options:
 - `--no-graph`: skip starter graph creation.
 - `--no-skills`: skip copying bundled skills.
 - `--force`: overwrite install-managed graph and skill files.
+
+## Command Line Use
+
+The CLI entrypoint is `sidecar/scripts/codex-sidecar.mjs`. The package exposes it through npm scripts:
+
+```bash
+npm run codex:install -- --workspace /path/to/workspace
+npm run codex:call -- --title "Review" --context "..." --file research/graph.yaml --question "What is weak?"
+npm run codex:ask -- --title "Review" --context "..." --question "Answer directly"
+npm run codex:session -- --title "Review" --context "..."
+```
+
+`codex:call` creates a session, stores context, attaches files, and optionally stages a user question. It does not call the model. `codex:ask` does the same setup and then streams the answer to stdout. `codex:session` is the base session creation path.
+
+Direct node invocation is equivalent:
+
+```bash
+node scripts/codex-sidecar.mjs install --workspace /path/to/workspace
+node scripts/codex-sidecar.mjs call --url http://localhost:4317 --title "Review"
+```
 
 ## Research Graph
 

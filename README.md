@@ -33,8 +33,9 @@ Two supported install shapes:
 ```bash
 cd ~/Applications/thinking-sidecar/sidecar
 npm install
+npm run build
 npm run codex:install -- --workspace ~/Research/project-a
-SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
+SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm start
 ```
 
 2. Put the app inside the workspace itself:
@@ -42,11 +43,14 @@ SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm run dev
 ```bash
 cd sidecar
 npm install
+npm run build
 npm run codex:install -- --workspace ..
-npm run dev
+npm start
 ```
 
 Open `http://localhost:4317`.
+
+Use `npm run dev` only when developing the Sidecar source itself.
 
 Install skills globally for Codex:
 
