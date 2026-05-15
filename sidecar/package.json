@@ -1,6 +1,6 @@
 {
   "name": "@binarycheater/research-sidecar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local research graph sidecar and CLI for Codex-assisted research workflows.",
   "keywords": [
     "research",
