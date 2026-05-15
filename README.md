@@ -58,4 +58,6 @@ Install skills globally for Codex:
 mkdir -p ~/.codex/skills
 cp -R skills/scholar-mode ~/.codex/skills/
 cp -R skills/sidecar-thinking ~/.codex/skills/
+cp -R skills/research-graph-sop ~/.codex/skills/
+cp -R skills/writing-explanatory-reports ~/.codex/skills/
 ```
