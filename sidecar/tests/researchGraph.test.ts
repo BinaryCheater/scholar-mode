@@ -63,7 +63,17 @@ describe("research graph view model", () => {
     const leftRight = layoutResearchGraph(visible, { direction: "LR", mode: "compact" });
     const yPositions = leftRight.nodes.map((node) => node.position.y);
 
-    expect(Math.max(...yPositions) - Math.min(...yPositions)).toBeLessThanOrEqual(120);
+    expect(Math.max(...yPositions) - Math.min(...yPositions)).toBeGreaterThanOrEqual(150);
+    expect(Math.max(...yPositions) - Math.min(...yPositions)).toBeLessThanOrEqual(260);
+  });
+
+  it("keeps compact columns far enough apart for readable node labels", () => {
+    const visible = getVisibleResearchGraph(graph, { expandedIds: new Set(["rq.main", "rq.theory"]) });
+    const compact = layoutResearchGraph(visible, { direction: "LR", mode: "compact" });
+    const main = compact.nodes.find((node) => node.id === "rq.main");
+    const theory = compact.nodes.find((node) => node.id === "rq.theory");
+
+    expect((theory?.position.x ?? 0) - (main?.position.x ?? 0)).toBeGreaterThanOrEqual(280);
   });
 
   it("uses roomier spacing for the full card view", () => {
@@ -72,6 +82,15 @@ describe("research graph view model", () => {
     const yPositions = full.nodes.map((node) => node.position.y);
 
     expect(Math.max(...yPositions) - Math.min(...yPositions)).toBeGreaterThanOrEqual(170);
+  });
+
+  it("keeps full card columns far enough apart to avoid edge and label crowding", () => {
+    const visible = getVisibleResearchGraph(graph, { expandedIds: new Set(["rq.main", "rq.theory"]) });
+    const full = layoutResearchGraph(visible, { direction: "LR", mode: "full" });
+    const main = full.nodes.find((node) => node.id === "rq.main");
+    const theory = full.nodes.find((node) => node.id === "rq.theory");
+
+    expect((theory?.position.x ?? 0) - (main?.position.x ?? 0)).toBeGreaterThanOrEqual(500);
   });
 
   it("returns expandable nodes for bulk and branch expansion controls", () => {

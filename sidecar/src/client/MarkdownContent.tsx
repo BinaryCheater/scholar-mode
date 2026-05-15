@@ -1,5 +1,8 @@
+import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 
 export function MarkdownContent({ basePath, className = "", content }: { basePath?: string; className?: string; content: string }) {
   return (
@@ -19,7 +22,8 @@ export function MarkdownContent({ basePath, className = "", content }: { basePat
             return <img src={resolved || src} {...props} />;
           }
         }}
-        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeKatex]}
+        remarkPlugins={[remarkGfm, remarkMath]}
       >
         {content}
       </ReactMarkdown>

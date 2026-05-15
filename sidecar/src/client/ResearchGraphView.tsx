@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   Background,
   Controls,
@@ -118,6 +118,7 @@ function ResearchGraphCanvas({
   const [mode, setMode] = useState<GraphViewMode>("compact");
   const [preview, setPreview] = useState<FilePreviewState>({ status: "idle" });
   const [previewDock, setPreviewDock] = useState<PreviewDock>("right");
+  const [previewSize, setPreviewSize] = useState({ right: 500, bottom: 340 });
   const { fitView, setCenter } = useReactFlow<ResearchFlowNode, Edge>();
   const graphIndex = useMemo(() => buildGraphIndex(graph), [graph]);
   const searchResults = useMemo(() => graphIndex.search(query), [graphIndex, query]);
@@ -158,7 +159,7 @@ function ResearchGraphCanvas({
         id: edge.id,
         source: edge.from,
         target: edge.to,
-        label: mode === "compact" ? compactEdgeLabel(edge) : edgeLabel(edge),
+        label: readableEdgeLabel(edge),
         type: mode === "compact" ? "bezier" : "smoothstep",
         className: `research-edge kind-${edge.kind}`,
         interactionWidth: 16,
@@ -174,7 +175,7 @@ function ResearchGraphCanvas({
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => fitView({ padding: 0.1, maxZoom: mode === "compact" ? 1.45 : 1.05, duration: 260 }), 80);
+    const timer = window.setTimeout(() => fitView({ padding: 0.16, maxZoom: mode === "compact" ? 1.15 : 0.9, duration: 260 }), 80);
     return () => window.clearTimeout(timer);
   }, [fitView, flowNodes.length, mode, query]);
 
@@ -261,7 +262,7 @@ function ResearchGraphCanvas({
                   {visible.nodes.length}/{graph.nodes.length} nodes · {visible.edges.length} edges
                 </span>
               </div>
-              <button className="secondary-button compact" onClick={() => fitView({ padding: 0.1, maxZoom: mode === "compact" ? 1.45 : 1.05, duration: 260 })}>
+              <button className="secondary-button compact" onClick={() => fitView({ padding: 0.16, maxZoom: mode === "compact" ? 1.15 : 0.9, duration: 260 })}>
                 Fit
               </button>
             </div>
@@ -306,7 +307,7 @@ function ResearchGraphCanvas({
       <section className="chat-pane graph-active">
         {header}
         {error && <div className="error-banner">{error}</div>}
-        <div className={preview.status === "idle" ? "graph-workspace" : `graph-workspace preview-${previewDock}`}>
+        <div className={preview.status === "idle" ? "graph-workspace" : `graph-workspace preview-${previewDock}`} style={previewWorkspaceStyle(preview.status, previewDock, previewSize)}>
           <div className="graph-canvas">
             <ReactFlow
               nodes={flowNodes}
@@ -315,7 +316,7 @@ function ResearchGraphCanvas({
               minZoom={0.25}
               maxZoom={1.7}
               fitView
-              fitViewOptions={{ padding: 0.1, maxZoom: mode === "compact" ? 1.45 : 1.05 }}
+              fitViewOptions={{ padding: 0.16, maxZoom: mode === "compact" ? 1.15 : 0.9 }}
               onNodeClick={(_, node) => void openNodePreview(node.data.item)}
               proOptions={{ hideAttribution: true }}
             >
@@ -324,7 +325,15 @@ function ResearchGraphCanvas({
             </ReactFlow>
             <GraphOverview layout={layout} mode={mode} />
           </div>
-          <FilePreviewPanel dock={previewDock} onClose={() => setPreview({ status: "idle" })} onDockChange={setPreviewDock} onOpenPath={(path) => void openPathFromPreview(path)} preview={preview} />
+          <FilePreviewPanel
+            dock={previewDock}
+            onClose={() => setPreview({ status: "idle" })}
+            onDockChange={setPreviewDock}
+            onOpenPath={(path) => void openPathFromPreview(path)}
+            onResize={setPreviewSize}
+            preview={preview}
+            size={previewSize}
+          />
         </div>
       </section>
     </main>
@@ -393,18 +402,23 @@ function FilePreviewPanel({
   onClose,
   onDockChange,
   onOpenPath,
+  onResize,
+  size,
   preview
 }: {
   dock: PreviewDock;
   onClose: () => void;
   onDockChange: (dock: PreviewDock) => void;
   onOpenPath: (path: string) => void;
+  onResize: (size: { right: number; bottom: number }) => void;
+  size: { right: number; bottom: number };
   preview: FilePreviewState;
 }) {
   if (preview.status === "idle") return null;
 
   return (
     <aside className="file-preview-panel">
+      <button className={`preview-resize-handle ${dock}`} onDoubleClick={() => onResize(defaultPreviewSize())} onPointerDown={(event) => startPreviewResize(event, dock, size, onResize)} title={dock === "right" ? "Drag to resize preview width" : "Drag to resize preview height"} />
       <header>
         <div>
           <strong>{preview.title}</strong>
@@ -498,8 +512,8 @@ function FullNodeContent({ item, highlighted }: { item: LayoutResearchNode; high
   );
 }
 
-function edgeLabel(edge: ResearchGraphEdge) {
-  return edge.label || edge.kind.replaceAll("_", " ");
+function readableEdgeLabel(edge: ResearchGraphEdge) {
+  return edge.label || "";
 }
 
 function htmlWithWorkspaceBase(path: string, content: string) {
@@ -513,6 +527,54 @@ function htmlWithWorkspaceBase(path: string, content: string) {
 
 function defaultExpandedIds(graph: ResearchGraph) {
   return new Set(graph.ui?.expanded?.length ? graph.ui.expanded : [graph.rootId]);
+}
+
+function defaultPreviewSize() {
+  return { right: 500, bottom: 340 };
+}
+
+function previewWorkspaceStyle(status: FilePreviewState["status"], dock: PreviewDock, size: { right: number; bottom: number }): CSSProperties | undefined {
+  if (status === "idle") return undefined;
+  if (dock === "right") {
+    return { gridTemplateColumns: `minmax(0, 1fr) minmax(300px, ${size.right}px)` };
+  }
+  return { gridTemplateRows: `minmax(0, 1fr) minmax(220px, ${size.bottom}px)` };
+}
+
+function startPreviewResize(
+  event: ReactPointerEvent<HTMLButtonElement>,
+  dock: PreviewDock,
+  size: { right: number; bottom: number },
+  onResize: (size: { right: number; bottom: number }) => void
+) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.setPointerCapture(event.pointerId);
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const start = { ...size };
+
+  function onMove(moveEvent: PointerEvent) {
+    if (dock === "right") {
+      const next = clamp(start.right - (moveEvent.clientX - startX), 300, Math.max(360, window.innerWidth - 520));
+      onResize({ ...start, right: next });
+    } else {
+      const next = clamp(start.bottom - (moveEvent.clientY - startY), 220, Math.max(260, window.innerHeight - 240));
+      onResize({ ...start, bottom: next });
+    }
+  }
+
+  function onUp() {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+  }
+
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp, { once: true });
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function nodeClassName(item: LayoutResearchNode, mode: GraphViewMode, extra = "") {
@@ -556,14 +618,8 @@ function shortPath(path: string) {
   return path.split("/").pop() || path;
 }
 
-function compactEdgeLabel(edge: ResearchGraphEdge) {
-  if (edge.kind === "decomposes") return "";
-  if (edge.kind === "leads_to") return "next";
-  return edgeLabel(edge);
-}
-
 function GraphOverview({ layout, mode }: { layout: LayoutResearchGraph; mode: GraphViewMode }) {
-  const nodeMetrics = mode === "full" ? { width: 260, height: 112, radius: 48 } : { width: 18, height: 18, radius: 9 };
+  const nodeMetrics = mode === "full" ? { width: 310, height: 136, radius: 54 } : { width: 18, height: 18, radius: 9 };
   const points = layout.nodes.map((node) => ({
     ...node,
     cx: node.position.x + nodeMetrics.width / 2,
