@@ -21,7 +21,6 @@ Research Sidecar 面向一种很常见的研究状态：你有不断变化的笔
 ```txt
 sidecar/              npm 包、Web UI、server、CLI、测试
 skills/               bundled workspace skills，由 `research-sidecar install-skills` 复制
-research/             demo graph 和 demo 节点文档
 docs/                 使用说明和 API 文档
 .side/                本地应用状态；不进入 git
 ```
@@ -64,7 +63,7 @@ file: /shared/background.md
 全局安装：
 
 ```bash
-npm install -g research-sidecar
+npm install -g @binarycheater/research-sidecar
 cd ~/Research/project-a
 research-sidecar
 ```
@@ -73,7 +72,7 @@ research-sidecar
 
 ```bash
 cd ~/Research/project-a
-npm install -D research-sidecar
+npm install -D @binarycheater/research-sidecar
 npx research-sidecar
 ```
 
@@ -122,4 +121,3 @@ npm pack --dry-run
 - [Sidecar 包 README](sidecar/README.md)
 - [使用指南](docs/sidecar-usage.md)
 - [API 文档](docs/api.md)
-

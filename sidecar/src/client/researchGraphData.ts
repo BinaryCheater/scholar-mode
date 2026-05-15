@@ -7,7 +7,6 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "rq.main",
       title: "Core research question",
       type: "question",
-      file: "research/rq.main.md",
       summary: "What exactly has to be explained, bounded, and tested?",
       status: "active",
       tags: ["framing"]
@@ -16,7 +15,6 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "rq.theory",
       title: "Theoretical mechanism",
       type: "question",
-      file: "research/rq.theory.md",
       summary: "Which mechanism makes the expected effect plausible?",
       status: "active",
       tags: ["theory", "mechanism"]
@@ -25,7 +23,6 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "rq.method",
       title: "Method and identification",
       type: "method",
-      file: "research/rq.method.md",
       summary: "How can the mechanism be observed without overclaiming?",
       status: "draft",
       tags: ["method"]
@@ -34,7 +31,6 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "rq.evidence",
       title: "Evidence map",
       type: "evidence",
-      file: "research/rq.evidence.md",
       summary: "Which sources support, weaken, or falsify the argument?",
       status: "active",
       tags: ["evidence"]
@@ -43,7 +39,6 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "concept.001",
       title: "Boundary condition",
       type: "concept",
-      file: "research/concept.boundary.md",
       summary: "Where the mechanism should stop applying.",
       status: "draft",
       tags: ["scope"]
@@ -52,7 +47,6 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "claim.001",
       title: "Mechanism claim",
       type: "claim",
-      file: "research/claim.mechanism.md",
       summary: "A precise, falsifiable version of the central claim.",
       status: "active",
       tags: ["claim"]
@@ -61,25 +55,22 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "source.001",
       title: "Anchor paper",
       type: "source",
-      file: "sources/papers/anchor-paper.md",
       summary: "Closest prior work and vocabulary.",
       status: "done",
       tags: ["literature"]
     },
     {
       id: "source.html-demo",
-      title: "HTML preview demo",
+      title: "External artifact",
       type: "source",
-      file: "research/demo-preview.html",
-      summary: "A small HTML document used to verify graph file preview rendering.",
+      summary: "A placeholder for a source document or rendered artifact.",
       status: "draft",
-      tags: ["demo", "html"]
+      tags: ["source"]
     },
     {
       id: "evidence.001",
       title: "Observed pattern",
       type: "evidence",
-      file: "research/evidence.pattern.md",
       summary: "A repeated observation that should be explained by the claim.",
       status: "draft",
       tags: ["observation"]
@@ -88,7 +79,6 @@ export const sampleResearchGraph: ResearchGraph = {
       id: "task.001",
       title: "Next reading pass",
       type: "task",
-      file: "research/tasks/reading-pass.md",
       summary: "Collect rival explanations before drafting.",
       status: "active",
       tags: ["next"]

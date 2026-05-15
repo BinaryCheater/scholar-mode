@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
   buildGraphIndex,
   getExpandableDescendantIds,
@@ -9,7 +7,6 @@ import {
   layoutResearchGraph,
   type ResearchGraph
 } from "../src/lib/researchGraph";
-import { sampleResearchGraph } from "../src/client/researchGraphData";
 
 const graph: ResearchGraph = {
   rootId: "rq.main",
@@ -97,14 +94,5 @@ describe("research graph view model", () => {
     expect(getExpandableNodeIds(graph)).toEqual(["rq.main", "rq.theory"]);
     expect(getExpandableDescendantIds(graph, "rq.main")).toEqual(["rq.main", "rq.theory"]);
     expect(getExpandableDescendantIds(graph, "rq.method")).toEqual([]);
-  });
-
-  it("ships demo files for the sample graph preview paths", () => {
-    const missing = sampleResearchGraph.nodes
-      .map((node) => node.file)
-      .filter((file): file is string => Boolean(file))
-      .filter((file) => !existsSync(join(process.cwd(), "..", file)));
-
-    expect(missing).toEqual([]);
   });
 });

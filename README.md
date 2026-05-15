@@ -21,7 +21,6 @@ Research Sidecar is meant for a common research pattern: you have evolving notes
 ```txt
 sidecar/              npm package, web UI, server, CLI, tests
 skills/               bundled workspace skills copied by `research-sidecar install-skills`
-research/             demo graph and demo node documents
 docs/                 usage guide and API reference
 .side/                local app state; ignored by git
 ```
@@ -64,7 +63,7 @@ file: /shared/background.md
 Global install:
 
 ```bash
-npm install -g research-sidecar
+npm install -g @binarycheater/research-sidecar
 cd ~/Research/project-a
 research-sidecar
 ```
@@ -73,7 +72,7 @@ Project-local install:
 
 ```bash
 cd ~/Research/project-a
-npm install -D research-sidecar
+npm install -D @binarycheater/research-sidecar
 npx research-sidecar
 ```
 
@@ -122,4 +121,3 @@ npm pack --dry-run
 - [Sidecar package README](sidecar/README.md)
 - [Usage guide](docs/sidecar-usage.md)
 - [API reference](docs/api.md)
-

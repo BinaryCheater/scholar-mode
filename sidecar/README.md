@@ -21,7 +21,7 @@ This gives Codex a concrete structure to maintain while giving the human reader 
 Global install:
 
 ```bash
-npm install -g research-sidecar
+npm install -g @binarycheater/research-sidecar
 cd ~/Research/project-a
 research-sidecar
 ```
@@ -30,7 +30,7 @@ Project-local install:
 
 ```bash
 cd ~/Research/project-a
-npm install -D research-sidecar
+npm install -D @binarycheater/research-sidecar
 npx research-sidecar
 ```
 

@@ -1,10 +1,34 @@
 {
-  "name": "research-sidecar",
+  "name": "@binarycheater/research-sidecar",
   "version": "0.1.0",
+  "description": "Local research graph sidecar and CLI for Codex-assisted research workflows.",
+  "keywords": [
+    "research",
+    "codex",
+    "graph",
+    "markdown",
+    "sidecar",
+    "workspace",
+    "skills"
+  ],
+  "homepage": "https://github.com/BinaryCheater/scholar-mode#readme",
+  "bugs": {
+    "url": "https://github.com/BinaryCheater/scholar-mode/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BinaryCheater/scholar-mode.git",
+    "directory": "sidecar"
+  },
+  "license": "MIT",
+  "author": "BinaryCheater",
+  "engines": {
+    "node": ">=20"
+  },
   "private": false,
   "type": "module",
   "bin": {
-    "research-sidecar": "./bin/research-sidecar.mjs"
+    "research-sidecar": "bin/research-sidecar.mjs"
   },
   "files": [
     "bin",
@@ -14,6 +38,7 @@
     "scripts",
     "skills",
     "package.json",
+    "LICENSE",
     "README.md",
     "README.zh.md"
   ],

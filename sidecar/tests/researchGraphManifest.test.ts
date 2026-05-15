@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -225,14 +225,5 @@ edges: []
     await expect(loadResearchGraphManifest(root)).rejects.toThrow("Frontmatter id other.node does not match graph node rq.main");
 
     await rm(root, { recursive: true, force: true });
-  });
-
-  it("ships a workspace graph manifest for the demo research files", async () => {
-    const graph = await loadResearchGraphManifest(join(process.cwd(), ".."));
-    const manifest = await readFile(join(process.cwd(), "..", "research/graph.yaml"), "utf8");
-
-    expect(manifest).toContain("root: rq.main");
-    expect(graph.nodes.length).toBeGreaterThan(5);
-    expect(graph.nodes.filter((node) => node.file && !node.fileExists)).toEqual([]);
   });
 });

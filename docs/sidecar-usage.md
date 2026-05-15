@@ -15,7 +15,7 @@ The app can be installed globally or locally. The directory where `research-side
 Install globally:
 
 ```bash
-npm install -g research-sidecar
+npm install -g @binarycheater/research-sidecar
 cd ~/Research/project-a
 research-sidecar init --graph research/graph.yaml
 research-sidecar
@@ -24,7 +24,7 @@ research-sidecar
 Or install in a project:
 
 ```bash
-npm install -D research-sidecar
+npm install -D @binarycheater/research-sidecar
 npx research-sidecar
 ```
 
