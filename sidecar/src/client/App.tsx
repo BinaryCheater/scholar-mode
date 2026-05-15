@@ -81,6 +81,16 @@ interface WorkspaceInfo {
   skills: WorkspaceSkill[];
 }
 
+interface GraphManifestCandidate {
+  path: string;
+  selected: boolean;
+  rootId?: string;
+  title?: string;
+  nodeCount?: number;
+  edgeCount?: number;
+  error?: string;
+}
+
 const SIDEBAR_WIDTH_KEY = "thinking-sidecar-sidebar-width";
 const SIDEBAR_SPLIT_KEY = "thinking-sidecar-sidebar-split-v2";
 
@@ -88,6 +98,8 @@ function App() {
   const [activeView, setActiveView] = useState<"chat" | "graph">("graph");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceInfo>({ instructionFiles: [], skills: [] });
+  const [graphCandidates, setGraphCandidates] = useState<GraphManifestCandidate[]>([]);
+  const [selectedGraphPath, setSelectedGraphPath] = useState("");
   const [researchGraph, setResearchGraph] = useState<ResearchGraph | null>(null);
   const [graphError, setGraphError] = useState("");
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -101,6 +113,9 @@ function App() {
   const [sidebarSplit, setSidebarSplit] = useState(() => readStoredSidebarSplit());
   const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [graphSaving, setGraphSaving] = useState(false);
+  const [skillsInstalling, setSkillsInstalling] = useState(false);
   const abortControllers = useRef<Record<string, AbortController>>({});
   const sidebarBodyRef = useRef<HTMLDivElement>(null);
 
@@ -119,6 +134,8 @@ function App() {
   async function boot() {
     const cfg = await api<AppConfig>("/api/config");
     setConfig(cfg);
+    setSelectedGraphPath(cfg.graphManifestPath);
+    await loadGraphCandidates();
     setWorkspace(await api<WorkspaceInfo>("/api/workspace"));
     await loadResearchGraph();
     const list = await api<SessionSummary[]>("/api/sessions");
@@ -136,6 +153,53 @@ function App() {
       setResearchGraph(await api<ResearchGraph>("/api/research-graph"));
     } catch (err) {
       setGraphError(`Graph manifest: ${errorText(err)}`);
+    }
+  }
+
+  async function loadGraphCandidates() {
+    const result = await api<{ current: string; candidates: GraphManifestCandidate[] }>("/api/graphs");
+    setGraphCandidates(result.candidates);
+    setSelectedGraphPath((current) => current || result.current);
+  }
+
+  async function saveGraphSelection() {
+    if (!selectedGraphPath.trim() || graphSaving) return;
+    setGraphSaving(true);
+    setNotice("");
+    try {
+      const next = await api<AppConfig>("/api/config", {
+        method: "PATCH",
+        body: JSON.stringify({ graphManifestPath: selectedGraphPath })
+      });
+      setConfig(next);
+      setSelectedGraphPath(next.graphManifestPath);
+      await loadGraphCandidates();
+      await loadResearchGraph();
+      setNotice(`Graph saved: ${next.graphManifestPath}`);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setGraphSaving(false);
+    }
+  }
+
+  async function installWorkspaceSkills() {
+    if (skillsInstalling) return;
+    setSkillsInstalling(true);
+    setNotice("");
+    try {
+      const result = await api<{ installed: string[]; skipped: string[]; sourceRoot: string | null }>("/api/workspace/skills/install", {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      setWorkspace(await api<WorkspaceInfo>("/api/workspace"));
+      const installed = result.installed.length ? `${result.installed.length} installed` : "no new skills";
+      const skipped = result.skipped.length ? `, ${result.skipped.length} already present` : "";
+      setNotice(`Workspace skills: ${installed}${skipped}`);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setSkillsInstalling(false);
     }
   }
 
@@ -395,6 +459,7 @@ function App() {
       value={sidebarWidth}
     />
   );
+  const selectedGraphCandidate = graphCandidates.find((candidate) => candidate.path === selectedGraphPath);
   const graphSidebarHeader = (
     <div className="workspace-sidebar-header">
       {viewTabs}
@@ -409,6 +474,42 @@ function App() {
           </button>
         </div>
       </div>
+      {!sidebarCollapsed && (
+        <div className="graph-config">
+          <label>
+            Graph
+            <select value={selectedGraphPath} onChange={(event) => setSelectedGraphPath(event.target.value)} disabled={!graphCandidates.length}>
+              {graphCandidates.length ? (
+                graphCandidates.map((candidate) => (
+                  <option key={candidate.path} value={candidate.path}>
+                    {candidate.title ? `${candidate.title} · ${candidate.path}` : candidate.path}
+                  </option>
+                ))
+              ) : (
+                <option value="">No graph found</option>
+              )}
+            </select>
+          </label>
+          {selectedGraphCandidate?.error && <small className="graph-config-error">{selectedGraphCandidate.error}</small>}
+          {selectedGraphCandidate && !selectedGraphCandidate.error && (
+            <small>
+              {selectedGraphCandidate.nodeCount ?? 0} nodes · {selectedGraphCandidate.edgeCount ?? 0} edges
+            </small>
+          )}
+          <div className="graph-config-actions">
+            <button className="secondary-button compact" onClick={() => void loadGraphCandidates()}>
+              Refresh
+            </button>
+            <button className="secondary-button compact" onClick={() => void installWorkspaceSkills()} disabled={skillsInstalling}>
+              {skillsInstalling ? "Installing" : "Install skills"}
+            </button>
+            <button className="secondary-button compact primary" onClick={() => void saveGraphSelection()} disabled={!selectedGraphPath || selectedGraphPath === config?.graphManifestPath || graphSaving}>
+              {graphSaving ? "Saving" : "Save graph"}
+            </button>
+          </div>
+          {notice && <small className="graph-config-notice">{notice}</small>}
+        </div>
+      )}
     </div>
   );
 
@@ -433,7 +534,7 @@ function App() {
           {viewTabs}
           <div className="brand-row">
             <div className="workspace-sidebar-title">
-              <h1>Thinking Sidecar</h1>
+              <h1>Research Sidecar</h1>
               {!sidebarCollapsed && (
                 <>
                   <p>{config?.workspaceRoot || "Loading workspace..."}</p>

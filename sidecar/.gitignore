@@ -4,5 +4,6 @@ dist-server
 data
 .tmp-tests
 .env
+skills/
 
 tsconfig.tsbuildinfo

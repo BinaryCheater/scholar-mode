@@ -33,12 +33,12 @@ describe("codex sidecar CLI", () => {
     const sidecarSkill = await readFile(join(workspace, "skills", "sidecar-thinking", "SKILL.md"), "utf8");
     const scholarSkill = await readFile(join(workspace, "skills", "scholar-mode", "SKILL.md"), "utf8");
 
-    expect(stdout).toContain("Thinking Sidecar workspace installed");
+    expect(stdout).toContain("Research Sidecar workspace installed");
     expect(stdout).toContain(`Workspace: ${workspace}`);
     expect(stdout).toContain("Run from a home/user-level Sidecar install:");
     expect(stdout).toContain("Or, if the Sidecar app itself is copied into this workspace:");
     expect(config.graph.manifestPath).toBe("notes/maps/graph.yaml");
-    expect(config.tools.allowedWriteExtensions).toEqual([".md", ".markdown", ".html", ".htm"]);
+    expect(config.tools.allowedWriteExtensions).toEqual([".md", ".markdown", ".html", ".htm", ".yaml", ".yml"]);
     expect(index).toEqual({ sessions: [] });
     expect(graph).toContain("root: rq.main");
     expect(note).toContain("# Core research question");

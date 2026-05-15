@@ -9,7 +9,7 @@ const baseUrl = args.url || "http://localhost:4317";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(appRoot, "..");
-const defaultAllowedWriteExtensions = [".md", ".markdown", ".html", ".htm"];
+const defaultAllowedWriteExtensions = [".md", ".markdown", ".html", ".htm", ".yaml", ".yml"];
 
 if (args.help) {
   console.log(`Usage:
@@ -140,7 +140,7 @@ async function installWorkspace(args) {
     await installStarterGraph(workspaceRoot, graphManifestPath, Boolean(args.force));
   }
 
-  console.log("Thinking Sidecar workspace installed");
+  console.log("Research Sidecar workspace installed");
   console.log(`Workspace: ${workspaceRoot}`);
   console.log(`Config: ${join(sideDir, "config.json")}`);
   console.log(`Graph: ${graphManifestPath}${args.noGraph ? " (not created)" : ""}`);

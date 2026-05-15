@@ -1,195 +1,242 @@
-# Thinking Sidecar
+# Research Sidecar
 
-A local web sidecar for explicit-context reasoning beside Codex. It keeps context transparent: paste a Codex summary, ask the model to read workspace files through tools, and get an independent review of claims, assumptions, rival explanations, weak links, and next evidence.
+English | [中文](README.zh.md)
 
-## Run
+Research Sidecar is a local web app and npm CLI for graph-backed research work. It is designed to run beside Codex: Codex can create or update research notes, while Research Sidecar gives you a readable graph, document preview, and explicit review surface for judging the work.
 
-There are two supported ways to use the app.
+The important rule is simple: **the directory where you run `research-sidecar` is the workspace**. The app reads and writes only inside that workspace, and stores private local state under `.side/`.
 
-### Home Install
+## Why It Exists
 
-Install the app once under a user directory and point it at any workspace:
+Research work often starts from vague questions and evolves through experiments, reports, partial conclusions, and revisions. A linear folder of Markdown files becomes hard to inspect. Research Sidecar separates the problem into three layers:
 
-```bash
-cd ~/Applications/thinking-sidecar/sidecar
-npm install
-npm run build
-npm run codex:install -- --workspace ~/Research/project-a
-SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm start
-```
+- `graph.yaml`: the structural map of questions, methods, claims, evidence, tasks, and outputs.
+- Markdown/HTML files: the detailed reasoning, experiment reports, tables, formulas, and drafts.
+- `.side/`: local private app state, selected graph, sessions, and provider config.
 
-### Workspace-Local Install
+This gives Codex a concrete structure to maintain while giving the human reader a compact interface for understanding what happened.
 
-Keep the app inside the research workspace:
+## Install
+
+Global install:
 
 ```bash
-cd sidecar
-cp .env.example .env
-npm install
-npm run build
-npm run codex:install -- --workspace ..
-OPENAI_API_KEY=sk-... npm start
+npm install -g research-sidecar
+cd ~/Research/project-a
+research-sidecar
 ```
 
-Open `http://localhost:4317`.
-
-Use `npm run dev` only when editing the Sidecar source. It runs the TypeScript server through `tsx` and serves the Vite client in development mode. For normal use, build once and run `npm start`.
-
-Useful environment variables:
-
-- `OPENAI_API_KEY`: required for model calls.
-- `OPENAI_BASE_URL`: optional OpenAI-compatible endpoint, for example `https://api.deepseek.com`.
-- `SIDECAR_WORKSPACE_ROOT`: file-read root. Defaults to the parent of `sidecar`.
-- `SIDECAR_GRAPH_MANIFEST`: graph manifest path inside the workspace. Defaults to `research/graph.yaml`.
-- `SIDECAR_DEFAULT_MODEL`: defaults to `gpt-5.5`.
-- `PORT`: defaults to `4317`.
-
-In home-install mode, always set `SIDECAR_WORKSPACE_ROOT` to the repo that contains the Markdown, HTML, `graph.yaml`, and `.side/` state. In workspace-local mode, the default workspace root is the parent of `sidecar`.
-
-## Workspace Install Command
-
-Initialize any workspace:
+Project-local install:
 
 ```bash
-npm run codex:install -- --workspace /path/to/workspace
+cd ~/Research/project-a
+npm install -D research-sidecar
+npx research-sidecar
 ```
 
-This creates `.side/config.json`, `.side/sessions/index.json`, a `.gitignore` entry for `.side/`, bundled workspace skills, and a starter graph unless disabled.
+Open:
 
-Useful options:
-
-- `--graph notes/maps/graph.yaml`
-- `--no-graph`
-- `--no-skills`
-- `--force`
+```txt
+http://localhost:4317
+```
 
 ## CLI Commands
 
-All CLI commands are wrappers around `scripts/codex-sidecar.mjs`.
-
-Initialize a workspace:
+Start the app for the current directory:
 
 ```bash
-npm run codex:install -- --workspace /path/to/workspace
+research-sidecar
 ```
 
-Create a session and stage context without calling the model:
+Start with an explicit graph for this run:
 
 ```bash
-npm run codex:call -- --title "Review" --context "Codex summary..." --file research/graph.yaml --question "What is the weakest assumption?"
+research-sidecar --graph dingyi/synthetic/graph.yaml
 ```
 
-Create a session and stream the model answer to stdout:
+Initialize workspace state:
 
 ```bash
-npm run codex:ask -- --title "Review" --context "Codex summary..." --question "What should Codex do next?"
+research-sidecar init --graph research/graph.yaml
 ```
 
-Create a plain session:
+Install bundled skills into the workspace:
 
 ```bash
-npm run codex:session -- --title "Review" --context "Codex summary..."
+research-sidecar install-skills
 ```
 
-Direct invocation is equivalent:
+Useful options:
 
-```bash
-node scripts/codex-sidecar.mjs install --workspace /path/to/workspace
-node scripts/codex-sidecar.mjs call --url http://localhost:4317 --title "Review"
+- `--workspace /path/to/workspace`: override the current directory as workspace.
+- `--graph path/to/graph.yaml`: set the graph manifest path inside the workspace.
+- `--port 4317`: choose the HTTP port.
+- `--force`: overwrite install-managed starter graph or skill files for `init` / `install-skills`.
+- `--no-graph`: initialize `.side/` without creating a starter graph.
+- `--no-skills`: initialize `.side/` without copying bundled skills.
+
+## Workspace Config
+
+Workspace config lives at:
+
+```txt
+<workspace>/.side/config.json
 ```
 
-## API Routing
+Example:
 
-- Official OpenAI endpoints use the Responses API.
-- OpenAI-compatible non-OpenAI endpoints, such as DeepSeek, use Chat Completions.
-
-The UI does not expose this as a user choice; the server picks from `OPENAI_BASE_URL`.
-
-For OpenAI-compatible providers such as DeepSeek, set:
-
-```bash
-OPENAI_BASE_URL=https://api.deepseek.com
-SIDECAR_DEFAULT_MODEL=deepseek-v4-pro
+```json
+{
+  "defaultModel": "deepseek-v4-pro",
+  "openaiBaseURL": "https://api.deepseek.com",
+  "apiMode": "chat",
+  "graph": {
+    "manifestPath": "dingyi/synthetic/graph.yaml"
+  },
+  "tools": {
+    "allowedWriteExtensions": [".md", ".markdown", ".html", ".htm", ".yaml", ".yml"]
+  }
+}
 ```
 
-The app will automatically route this through Chat Completions.
+The UI can update `graph.manifestPath`: choose a graph in the Graph panel and click **Save graph**. This writes the selected graph to `.side/config.json`.
 
-## Context And Caching
+Keep `.side/` out of git. It can contain API keys and private session history.
 
-Each request is self-contained. The server sends the review protocol, manual context, optional instruction files, discovered workspace skills, triggered skills, tool results, prior session messages, and the current user request together. Stable protocol/context content is placed before conversation history and the current request so providers with automatic prompt/context caching can reuse the longest unchanged prefix.
+## Graph Discovery And Link Rules
 
-The UI renders assistant messages as Markdown and keeps streaming state per session, so switching sessions during generation does not move partial output into the wrong chat. Use `Stop` to abort an in-flight answer. Edit the context or prompt, then use `Rerun` to answer the previous user request again with the updated context.
+The app searches the whole workspace for graph candidates:
 
-User messages can also be edited in place. Saving an edit truncates the session after that user turn and regenerates from the edited point, matching the "rewind and answer again" interaction used by coding agents.
+- `graph.yaml`
+- `graph.yml`
+- `*.graph.yaml`
+- `*.graph.yml`
 
-## Workspace Tools
+It ignores dependency/build folders such as `node_modules`, `dist`, `dist-server`, `.git`, and `.side`.
 
-When the auto-selected route is Chat Completions, enable workspace tools to let the model call a small OpenAI-compatible tool set:
+If a workspace contains more than one graph, choose the current one in the UI. The selected graph is persisted in `.side/config.json`.
 
-- `list_workspace_files`
-- `read_workspace_file`
-- `read_workspace_files`
-- `write_workspace_file`
-- `get_git_diff`
-- `load_skill`
-
-All file paths are workspace-relative and constrained to `SIDECAR_WORKSPACE_ROOT`. `write_workspace_file` defaults to Markdown and HTML only: `.md`, `.markdown`, `.html`, `.htm`. The allow-list is stored in `.side/config.json` under `tools.allowedWriteExtensions`.
-
-Tool calls and tool results are shown in the chat and persisted in the session history before the final assistant answer.
-
-The UI also lists workspace skills discovered from `SKILL.md` files. Skill handling is progressive:
-
-- Discovery scans frontmatter only: `name`, `description`, and `path`.
-- Each turn matches the prompt and manual context against discovered skill metadata.
-- High-confidence matches auto-load the full `SKILL.md` into the context packet.
-- Medium-confidence matches are shown as candidates; the model can call `load_skill` to read the full instructions before relying on that skill.
-- The conversation flow records skill routing and tool use separately, so you can see what was discovered, triggered, loaded, and called.
-
-## Codex Handoff
-
-With the sidecar server running:
-
-```bash
-npm run codex:call -- --title "Skill review" --context "Codex summary..." --file SKILL.md --file README.md --question "What is the weakest assumption?"
-```
-
-This creates a session, stores the explicit context, snapshots the listed files, optionally adds a manual user question, and prints the URL. The question is staged in the session; it does not call the model until the user continues in the web UI.
-
-For an explicit all-automatic path, Codex can ask the sidecar and stream the answer back:
-
-```bash
-npm run codex:ask -- --title "Skill review" --context "Codex summary..." --file SKILL.md --question "What should Codex do next?"
-```
-
-Use `codex:ask` when the user wants Codex to relay the answer directly. Use `codex:call` as the default integration path.
-
-## Research Graph
-
-The graph is loaded from the configured manifest, defaulting to `research/graph.yaml`.
+Inside a graph, file links are relative to the graph file's directory by default:
 
 ```yaml
-root: rq.main
-
 nodes:
   - id: rq.main
-    title: Core research question
+    title: Main question
     type: question
     file: ./rq.main.md
 
-edges:
-  - from: rq.main
-    to: rq.theory
-    kind: decomposes
+  - id: evidence.stage1
+    title: Stage 1 report
+    type: evidence
+    file: reports/stage1.md
 ```
 
-`graph.yaml` owns structure and UI hints. Markdown/HTML files own content. Node file links can be workspace-relative, or manifest-relative with `./`, `../`, or a bare filename. Returned paths are normalized to workspace-relative form.
+If the graph is at `dingyi/synthetic/graph.yaml`, those links resolve to:
 
-See `../docs/sidecar-usage.md` and `../docs/api.md` for the full project layout and API reference.
+```txt
+dingyi/synthetic/rq.main.md
+dingyi/synthetic/reports/stage1.md
+```
 
-## Tests
+Use a leading `/` for a workspace-root-relative link:
+
+```yaml
+file: /shared/background.md
+```
+
+Returned paths are normalized to workspace-relative paths so the UI, API, and tools use one stable form.
+
+## Markdown, HTML, And LaTeX
+
+Markdown previews support:
+
+- GitHub-flavored Markdown
+- tables
+- fenced code blocks with readable colors
+- inline math like `$x_i + y_i$`
+- display math like:
+
+```md
+$$
+\sum_i x_i
+$$
+```
+
+HTML previews are sandboxed through workspace raw-file routes so relative links can resolve inside the workspace.
+
+## Workspace Skills
+
+Research Sidecar works best when workspace skills are installed:
 
 ```bash
+research-sidecar install-skills
+```
+
+This copies bundled skills into:
+
+```txt
+<workspace>/skills/
+```
+
+Existing skill directories are skipped by default. Use `--force` when you intentionally want to overwrite install-managed skills.
+
+The UI also has an **Install skills** button in the Graph sidebar. After installation, the app discovers `SKILL.md` files and can load relevant instructions into review context.
+
+## Provider Configuration
+
+Environment variables:
+
+- `OPENAI_API_KEY`: required for model calls.
+- `OPENAI_BASE_URL`: optional OpenAI-compatible endpoint, for example `https://api.deepseek.com`.
+- `SIDECAR_DEFAULT_MODEL`: defaults to `gpt-5.5`.
+- `SIDECAR_GRAPH_MANIFEST`: graph manifest path inside the workspace; overrides config for the run.
+- `SIDECAR_WORKSPACE_ROOT`: workspace root; the CLI normally sets this from the current directory.
+- `PORT`: defaults to `4317`.
+
+Official OpenAI endpoints use the Responses API. OpenAI-compatible non-OpenAI endpoints use Chat Completions.
+
+Example:
+
+```bash
+OPENAI_BASE_URL=https://api.deepseek.com \
+SIDECAR_DEFAULT_MODEL=deepseek-v4-pro \
+research-sidecar
+```
+
+## Development
+
+Use these commands when editing this source tree:
+
+```bash
+npm install
+npm run dev
 npm test
 npm run typecheck
 npm run build
 ```
+
+The development helper CLI is still available:
+
+```bash
+npm run codex:install -- --workspace /path/to/workspace
+npm run codex:call -- --title "Review" --context "Codex summary..." --file research/graph.yaml
+npm run codex:ask -- --title "Review" --context "Codex summary..." --question "What is weak?"
+```
+
+## Packaging
+
+Before publishing or testing a local tarball:
+
+```bash
+npm pack --dry-run
+```
+
+The `prepack` script builds the client and server, then copies bundled skills into the package. The package includes:
+
+- `bin/research-sidecar.mjs`
+- `dist/client`
+- `dist-server`
+- `skills`
+- CLI helper scripts
+- README files
+

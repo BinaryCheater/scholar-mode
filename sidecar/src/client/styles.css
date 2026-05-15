@@ -167,6 +167,61 @@ body.sidebar-split-resizing {
   gap: 6px;
 }
 
+.graph-config {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.graph-config label {
+  display: grid;
+  gap: 6px;
+  color: #3f454b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.graph-config select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #d9d9e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #202123;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
+.graph-config small {
+  overflow: hidden;
+  color: #697077;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.graph-config-error {
+  color: #b42318 !important;
+}
+
+.graph-config-notice {
+  color: #067647 !important;
+}
+
+.graph-config-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.graph-config-actions button {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 h1,
 h2,
 p {
@@ -801,6 +856,12 @@ textarea {
 
 .secondary-button.compact {
   padding: 6px 9px;
+}
+
+.secondary-button.primary {
+  border-color: #202123;
+  background: #202123;
+  color: #fff;
 }
 
 .edit-form {

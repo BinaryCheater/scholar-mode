@@ -1,11 +1,26 @@
 {
-  "name": "codex-thinking-sidecar",
+  "name": "research-sidecar",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
+  "bin": {
+    "research-sidecar": "./bin/research-sidecar.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "dist-server",
+    "!dist-server/**/*.tsbuildinfo",
+    "scripts",
+    "skills",
+    "package.json",
+    "README.md",
+    "README.zh.md"
+  ],
   "scripts": {
     "dev": "tsx src/server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
+    "prepack": "npm run build && node scripts/prepare-package.mjs",
     "start": "node dist-server/server/index.js",
     "codex:install": "node scripts/codex-sidecar.mjs install",
     "codex:ask": "node scripts/codex-sidecar.mjs ask",

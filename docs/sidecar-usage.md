@@ -1,76 +1,42 @@
-# Thinking Sidecar Usage Guide
+# Research Sidecar Usage Guide
 
 ## Purpose
 
-Thinking Sidecar is a local research companion for Codex. It keeps three concerns separate:
+Research Sidecar is a local research companion for Codex. It keeps three concerns separate:
 
 - Research content lives in your workspace as Markdown or HTML.
 - Research structure lives in a graph manifest, usually `research/graph.yaml`.
 - App state and private configuration live in `.side/`.
 
-The app can be embedded inside a research repo or installed elsewhere and pointed at a repo.
+The app can be installed globally or locally. The directory where `research-sidecar` is launched becomes the workspace root.
 
 ## Installation Shapes
 
-There are two intended ways to use Sidecar.
-
-### Home Install, Pointed At A Workspace
-
-Use this when you want to install the Sidecar app once under your home directory and use it with many research repositories.
-
-```txt
-~/Applications/thinking-sidecar/
-  sidecar/
-
-~/Research/project-a/
-  .side/
-  research/
-    graph.yaml
-```
-
-Initialize any workspace:
+Install globally:
 
 ```bash
-cd ~/Applications/thinking-sidecar/sidecar
-npm install
-npm run build
-npm run codex:install -- --workspace ~/Research/project-a
+npm install -g research-sidecar
+cd ~/Research/project-a
+research-sidecar init --graph research/graph.yaml
+research-sidecar
 ```
 
-Run the app for that workspace:
+Or install in a project:
 
 ```bash
-SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm start
+npm install -D research-sidecar
+npx research-sidecar
 ```
-
-This keeps the app code out of the research repo while storing `.side/`, skills, graph, sessions, and config in the research workspace.
-
-### Workspace-Local Install
-
-Use this when the Sidecar app itself should live inside the research repo.
 
 ```txt
 my-research-repo/
-  sidecar/
   research/
     graph.yaml
     rq.main.md
   .side/
 ```
 
-Run:
-
-```bash
-cd sidecar
-npm install
-npm run build
-npm run codex:install -- --workspace ..
-npm start
-```
-
-The default workspace root is the parent of `sidecar`, so this layout works without `SIDECAR_WORKSPACE_ROOT`.
-
-In both modes, graph paths, file previews, tools, session state, and `.side/config.json` apply to the workspace root, not necessarily to the app install directory.
+Graph paths, file previews, tools, session state, and `.side/config.json` apply to the workspace root, not to the package install directory.
 
 `npm run dev` is for developing Sidecar itself. Normal use is `npm run build` once, then `npm start`.
 
@@ -98,7 +64,7 @@ Sidecar writes app state under the workspace:
     "manifestPath": "research/graph.yaml"
   },
   "tools": {
-    "allowedWriteExtensions": [".md", ".markdown", ".html", ".htm"]
+    "allowedWriteExtensions": [".md", ".markdown", ".html", ".htm", ".yaml", ".yml"]
   }
 }
 ```
@@ -107,10 +73,10 @@ Keep `.side/` out of git because it may contain API keys and private session his
 
 ## Workspace Install Command
 
-`codex:install` initializes a target workspace:
+`research-sidecar init` initializes the current workspace:
 
 ```bash
-npm run codex:install -- --workspace /path/to/workspace
+research-sidecar init --graph research/graph.yaml
 ```
 
 It creates:
@@ -131,7 +97,15 @@ Options:
 
 ## Command Line Use
 
-The CLI entrypoint is `sidecar/scripts/codex-sidecar.mjs`. The package exposes it through npm scripts:
+Normal use:
+
+```bash
+research-sidecar
+research-sidecar --graph dingyi/synthetic/graph.yaml
+research-sidecar install-skills
+```
+
+Development handoff helpers remain available through npm scripts:
 
 ```bash
 npm run codex:install -- --workspace /path/to/workspace
@@ -203,7 +177,7 @@ edges:
 
 Default manifest path: `research/graph.yaml`.
 
-Override it with either:
+The UI discovers graph files across the workspace and can save the selected manifest to `.side/config.json`. Override it with either:
 
 ```bash
 SIDECAR_GRAPH_MANIFEST=notes/maps/graph.yaml npm run dev
@@ -225,10 +199,8 @@ All paths must remain inside `SIDECAR_WORKSPACE_ROOT`.
 
 In `graph.yaml`, node `file` paths may be:
 
-- Workspace-relative: `research/rq.main.md`
-- Manifest-relative with `./`: `./rq.main.md`
-- Manifest-relative with `../`: `../sources/paper.md`
-- Manifest-relative bare file: `rq.main.md`
+- Manifest-relative: `rq.main.md`, `./rq.main.md`, `reports/stage1.md`, `../sources/paper.md`
+- Explicit workspace-root-relative: `/research/rq.main.md`
 
 The server normalizes returned node paths to workspace-relative paths so the UI, API, and tools use one stable form.
 

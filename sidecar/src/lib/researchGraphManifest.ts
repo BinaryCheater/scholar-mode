@@ -155,9 +155,10 @@ async function readNodeFrontmatter(workspaceRoot: string, path: string): Promise
 function normalizeManifestLinkedPath(workspaceRoot: string, manifestDir: string, value?: string) {
   if (!value) return undefined;
   if (isAbsolute(value)) {
-    throw new Error(`Graph file paths must be relative to the workspace or manifest directory: ${value}`);
+    const workspaceRelative = value.replace(/^\/+/, "");
+    return toWorkspaceRelativePath(workspaceRoot, resolveWorkspacePath(workspaceRoot, workspaceRelative));
   }
-  const candidate = value.startsWith("./") || value.startsWith("../") || !value.includes("/") ? join(manifestDir, value) : value;
+  const candidate = join(manifestDir, value);
   return toWorkspaceRelativePath(workspaceRoot, resolveWorkspacePath(workspaceRoot, candidate));
 }
 

@@ -1,11 +1,11 @@
 ---
 name: sidecar-thinking
-description: Use when Codex should call the local Thinking Sidecar app, create or inspect a Sidecar session, hand off explicit context, maintain a research graph, or use the Sidecar API/CLI for a second-opinion review.
+description: Use when Codex should call the local Research Sidecar app, create or inspect a Sidecar session, hand off explicit context, maintain a research graph, or use the Sidecar API/CLI for a second-opinion review.
 ---
 
 # Sidecar Thinking
 
-Use this skill to hand off explicit context from Codex to the local Thinking Sidecar. The sidecar should judge only what is in the context packet; do not imply it has Codex's hidden state.
+Use this skill to hand off explicit context from Codex to the local Research Sidecar. The sidecar should judge only what is in the context packet; do not imply it has Codex's hidden state.
 
 The app can be embedded inside a research repo or installed separately. If it is installed separately, run it with `SIDECAR_WORKSPACE_ROOT=/path/to/research-repo`.
 
@@ -47,7 +47,7 @@ The graph is manifest-first:
 - Markdown and HTML files own content.
 - Default manifest path is `research/graph.yaml`.
 - Override with `SIDECAR_GRAPH_MANIFEST` or `.side/config.json` at `graph.manifestPath`.
-- Node file links may be workspace-relative, or manifest-relative with `./`, `../`, or a bare filename.
+- Node file links are relative to the graph manifest directory by default. Use a leading `/` for explicit workspace-root-relative links.
 
 Useful API endpoints:
 

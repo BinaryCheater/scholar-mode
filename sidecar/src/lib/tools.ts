@@ -16,7 +16,7 @@ interface WorkspaceToolsOptions {
   allowedWriteExtensions?: string[];
 }
 
-const DEFAULT_ALLOWED_WRITE_EXTENSIONS = [".md", ".markdown", ".html", ".htm"];
+const DEFAULT_ALLOWED_WRITE_EXTENSIONS = [".md", ".markdown", ".html", ".htm", ".yaml", ".yml"];
 
 export function createWorkspaceTools(workspaceRoot: string, options: WorkspaceToolsOptions = {}) {
   const allowedWriteExtensions = options.allowedWriteExtensions?.length ? options.allowedWriteExtensions : DEFAULT_ALLOWED_WRITE_EXTENSIONS;

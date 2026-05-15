@@ -19,12 +19,12 @@ interface SidecarConfigFile {
   };
 }
 
-const DEFAULT_ALLOWED_WRITE_EXTENSIONS = [".md", ".markdown", ".html", ".htm"];
+const DEFAULT_ALLOWED_WRITE_EXTENSIONS = [".md", ".markdown", ".html", ".htm", ".yaml", ".yml"];
 const DEFAULT_GRAPH_MANIFEST_PATH = "research/graph.yaml";
 
 export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   const env = options.env || process.env;
-  const workspaceRoot = resolve(env.SIDECAR_WORKSPACE_ROOT || resolve(process.cwd(), ".."));
+  const workspaceRoot = resolve(env.SIDECAR_WORKSPACE_ROOT || process.cwd());
   const sideDir = resolve(workspaceRoot, ".side");
   const configFile = resolve(sideDir, "config.json");
   mkdirSync(sideDir, { recursive: true });
@@ -47,6 +47,13 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   };
 
   writeSidecarConfig(configFile, config);
+  return config;
+}
+
+export function updateGraphManifestPath(config: AppConfig, manifestPath: string) {
+  const nextPath = normalizeManifestPath(manifestPath);
+  config.graphManifestPath = nextPath;
+  writeSidecarConfig(resolve(config.sideDir, "config.json"), config);
   return config;
 }
 

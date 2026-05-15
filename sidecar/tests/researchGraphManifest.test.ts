@@ -24,13 +24,13 @@ nodes:
   - id: rq.main
     title: Core research question
     type: question
-    file: research/rq.main.md
+    file: ./rq.main.md
     status: active
     tags: [framing]
   - id: task.reading
     title: Reading pass
     type: task
-    file: research/tasks/reading-pass.md
+    file: ./tasks/reading-pass.md
 edges:
   - from: rq.main
     to: task.reading
@@ -81,7 +81,7 @@ nodes:
   - id: claim.mechanism
     title: Manifest title
     type: claim
-    file: research/claim.mechanism.md
+    file: ./claim.mechanism.md
 edges: []
 `,
       "utf8"
@@ -215,7 +215,7 @@ nodes:
   - id: rq.main
     title: Main
     type: question
-    file: research/rq.main.md
+    file: ./rq.main.md
 edges: []
 `,
       "utf8"

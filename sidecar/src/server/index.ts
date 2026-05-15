@@ -3,12 +3,14 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildContextPacket } from "../lib/context.js";
 import { readWorkspaceFile } from "../lib/files.js";
+import { discoverGraphManifests } from "../lib/graphDiscovery.js";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/prompt.js";
 import { loadResearchGraphManifest } from "../lib/researchGraphManifest.js";
 import { streamOpenAIReview } from "../lib/openaiProvider.js";
 import { JsonSessionStore } from "../lib/store.js";
+import { installBundledSkills } from "../lib/workspaceInstall.js";
 import { findInstructionFiles, loadTriggeredSkillFiles, scanWorkspaceSkills, selectSkillTriggers } from "../lib/workspaceMeta.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, updateGraphManifestPath } from "./config.js";
 
 const config = loadConfig();
 const store = new JsonSessionStore(config.dataFile, { legacyFile: resolve(process.cwd(), "data", "sessions.json") });
@@ -19,14 +21,29 @@ const clientDist = resolve(__dirname, "../../dist/client");
 app.use(express.json({ limit: "4mb" }));
 
 app.get("/api/config", (_req, res) => {
-  res.json({
-    workspaceRoot: config.workspaceRoot,
-    graphManifestPath: config.graphManifestPath,
-    defaultModel: config.defaultModel,
-    openaiBaseURL: config.openaiBaseURL || null,
-    apiMode: config.apiMode,
-    hasOpenAIKey: Boolean(config.openaiAPIKey)
-  });
+  res.json(publicConfig());
+});
+
+app.patch("/api/config", (req, res, next) => {
+  try {
+    if (typeof req.body?.graphManifestPath === "string") {
+      updateGraphManifestPath(config, req.body.graphManifestPath);
+    }
+    res.json(publicConfig());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/graphs", async (_req, res, next) => {
+  try {
+    res.json({
+      current: config.graphManifestPath,
+      candidates: await discoverGraphManifests(config.workspaceRoot, config.graphManifestPath)
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/api/workspace", async (_req, res, next) => {
@@ -35,6 +52,15 @@ app.get("/api/workspace", async (_req, res, next) => {
       instructionFiles: (await findInstructionFiles(config.workspaceRoot)).map(({ path, bytes }) => ({ path, bytes })),
       skills: await scanWorkspaceSkills(config.workspaceRoot)
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/workspace/skills/install", async (req, res, next) => {
+  try {
+    const result = await installBundledSkills(config.workspaceRoot, { force: Boolean(req.body?.force) });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -341,10 +367,21 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 });
 
 app.listen(config.port, () => {
-  console.log(`Thinking Sidecar: http://localhost:${config.port}`);
+  console.log(`Research Sidecar: http://localhost:${config.port}`);
   console.log(`Workspace root: ${config.workspaceRoot}`);
 });
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error.";
+}
+
+function publicConfig() {
+  return {
+    workspaceRoot: config.workspaceRoot,
+    graphManifestPath: config.graphManifestPath,
+    defaultModel: config.defaultModel,
+    openaiBaseURL: config.openaiBaseURL || null,
+    apiMode: config.apiMode,
+    hasOpenAIKey: Boolean(config.openaiAPIKey)
+  };
 }

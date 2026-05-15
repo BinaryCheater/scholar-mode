@@ -1,61 +1,125 @@
-# Thinking Sidecar Research Workspace
+# Research Sidecar Workspace
 
-This repository contains a local research sidecar app plus Codex skills for research work.
+English | [中文](README.zh.md)
 
-Core docs:
+This repository contains **Research Sidecar**, a local web app and CLI for graph-backed research work, plus the workspace skills that make the workflow useful with Codex.
 
-- [Usage guide](docs/sidecar-usage.md)
-- [API reference](docs/api.md)
-- [Sidecar app README](sidecar/README.md)
+Research Sidecar is meant for a common research pattern: you have evolving notes, experiment reports, claims, evidence, and open questions, but you need a small structure that makes the state understandable. The structure lives in `graph.yaml`; the detailed reasoning lives in Markdown or HTML files; private app state lives in `.side/`.
 
-Important directories:
+## What It Does
 
-```txt
-sidecar/              local web app
-research/             demo research graph and node files
-skills/               installable Codex skills
-docs/                 project documentation
-.side/                local app state, ignored by git
-```
+- Renders a research graph from one or more `graph.yaml` files in a workspace.
+- Lets you choose which graph is active and saves that choice to `.side/config.json`.
+- Opens Markdown, HTML, and text documents linked from graph nodes.
+- Supports inline and block LaTeX in Markdown previews.
+- Provides a chat/review surface where the model can inspect constrained workspace files.
+- Installs workspace skills into `<workspace>/skills` so Codex and the sidecar share the same research workflow instructions.
+- Packages as an npm CLI: run it globally or locally from the directory you want to treat as the workspace.
 
-The recommended model is manifest-first:
+## Repository Layout
 
 ```txt
-research/
-  graph.yaml          structure, relationships, UI hints
-  *.md / *.html       research content
+sidecar/              npm package, web UI, server, CLI, tests
+skills/               bundled workspace skills copied by `research-sidecar install-skills`
+research/             demo graph and demo node documents
+docs/                 usage guide and API reference
+.side/                local app state; ignored by git
 ```
 
-Two supported install shapes:
+## Mental Model
 
-1. Install the app under your home directory and point it at any workspace:
+The workspace is the directory where you run `research-sidecar`.
+
+```txt
+my-research-workspace/
+  .side/
+    config.json       local selected graph, model settings, sessions
+  skills/
+    research-graph-sop/
+    scholar-mode/
+  dingyi/
+    synthetic/
+      graph.yaml
+      rq.main.md
+      reports/
+```
+
+Graph files can live anywhere under the workspace. The UI searches the workspace for graph manifests such as `graph.yaml`, `graph.yml`, and `*.graph.yaml`. If several graphs exist, choose one in the UI and click **Save graph**; the choice is written to `.side/config.json`.
+
+Inside a graph, linked files are relative to the graph file by default:
+
+```yaml
+file: ./rq.main.md
+file: reports/stage1.md
+```
+
+Use a leading slash only when you explicitly mean “from the workspace root”:
+
+```yaml
+file: /shared/background.md
+```
+
+## Install And Run
+
+Global install:
 
 ```bash
-cd ~/Applications/thinking-sidecar/sidecar
-npm install
-npm run build
-npm run codex:install -- --workspace ~/Research/project-a
-SIDECAR_WORKSPACE_ROOT=~/Research/project-a npm start
+npm install -g research-sidecar
+cd ~/Research/project-a
+research-sidecar
 ```
 
-2. Put the app inside the workspace itself:
+Project-local install:
+
+```bash
+cd ~/Research/project-a
+npm install -D research-sidecar
+npx research-sidecar
+```
+
+Then open:
+
+```txt
+http://localhost:4317
+```
+
+Initialize a workspace:
+
+```bash
+research-sidecar init --graph research/graph.yaml
+```
+
+Install bundled skills into the workspace:
+
+```bash
+research-sidecar install-skills
+```
+
+## Working With This Source Repo
+
+For app development:
 
 ```bash
 cd sidecar
 npm install
-npm run build
-npm run codex:install -- --workspace ..
-npm start
+npm run dev
 ```
 
-Open `http://localhost:4317`.
-
-Use `npm run dev` only when developing the Sidecar source itself.
-
-Install skills globally for Codex:
+For production build validation:
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -R skills/scholar-mode ~/.codex/skills/
-cp -R skills/sidecar-thinking ~/.codex/skills/
+cd sidecar
+npm test
+npm run typecheck
+npm run build
+npm pack --dry-run
 ```
+
+`npm pack --dry-run` verifies that the npm package contains the CLI, compiled server, built client, and bundled skills.
+
+## Documentation
+
+- [Sidecar package README](sidecar/README.md)
+- [Usage guide](docs/sidecar-usage.md)
+- [API reference](docs/api.md)
+

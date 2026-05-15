@@ -1,4 +1,4 @@
-# Thinking Sidecar API
+# Research Sidecar API
 
 Base URL: `http://localhost:4317`.
 
@@ -20,11 +20,45 @@ Returns public app configuration.
 }
 ```
 
+### `PATCH /api/config`
+
+Updates workspace-local app configuration. Currently used to save the selected graph manifest path to `.side/config.json`.
+
+```json
+{
+  "graphManifestPath": "dingyi/synthetic/graph.yaml"
+}
+```
+
+### `GET /api/graphs`
+
+Discovers graph manifests across the workspace.
+
+```json
+{
+  "current": "dingyi/synthetic/graph.yaml",
+  "candidates": [
+    {
+      "path": "dingyi/synthetic/graph.yaml",
+      "selected": true,
+      "rootId": "rq.main",
+      "title": "Synthetic RQ",
+      "nodeCount": 33,
+      "edgeCount": 51
+    }
+  ]
+}
+```
+
 ## Workspace
 
 ### `GET /api/workspace`
 
 Returns discovered instruction files and workspace skills.
+
+### `POST /api/workspace/skills/install`
+
+Copies bundled skills into `<workspace>/skills`. Existing skill directories are skipped unless `force` is true.
 
 ### `GET /api/workspace/file?path=<path>`
 
@@ -175,4 +209,4 @@ When Chat Completions mode is active and tools are enabled, the model can call:
 - `get_git_diff`
 - `load_skill`
 
-`write_workspace_file` is restricted by `.side/config.json` at `tools.allowedWriteExtensions`. Defaults: `.md`, `.markdown`, `.html`, `.htm`. Common code extensions are rejected even if requested by mistake.
+`write_workspace_file` is restricted by `.side/config.json` at `tools.allowedWriteExtensions`. Defaults: `.md`, `.markdown`, `.html`, `.htm`, `.yaml`, `.yml`. Common code extensions are rejected even if requested by mistake.

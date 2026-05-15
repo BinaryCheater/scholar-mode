@@ -1,4 +1,4 @@
 interface:
   display_name: "Sidecar Thinking"
-  short_description: "Call the local Thinking Sidecar app and maintain its research graph"
+  short_description: "Call the local Research Sidecar app and maintain its research graph"
   default_prompt: "Use $sidecar-thinking to create a Sidecar review session, inspect the graph, or update graph-backed research notes."
