@@ -236,7 +236,9 @@ npm pack --dry-run
 - `bin/research-sidecar.mjs`
 - `dist/client`
 - `dist-server`
-- `skills`
+- `skills/research-graph-sop`
+- `skills/scholar-mode`
+- `skills/sidecar-thinking`
+- `skills/writing-explanatory-reports`
 - CLI helper scripts
 - README files
-

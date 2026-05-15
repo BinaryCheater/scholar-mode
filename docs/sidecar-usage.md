@@ -84,8 +84,10 @@ It creates:
 - `.side/config.json`
 - `.side/sessions/index.json`
 - `.gitignore` entry for `.side/`
+- `skills/research-graph-sop`
 - `skills/scholar-mode`
 - `skills/sidecar-thinking`
+- `skills/writing-explanatory-reports`
 - starter `research/graph.yaml` and `research/rq.main.md`, unless disabled
 
 Options:
@@ -223,20 +225,20 @@ Skills live in `skills/`:
 
 ```txt
 skills/
+  research-graph-sop/
+    SKILL.md
   scholar-mode/
     SKILL.md
   sidecar-thinking/
     SKILL.md
+  writing-explanatory-reports/
+    SKILL.md
 ```
 
-`scholar-mode` is for research reasoning. `sidecar-thinking` is for using the local app, API, CLI, and graph workflow.
-
-To install them globally for Codex:
+`research-graph-sop` keeps graph YAML disciplined. `sidecar-thinking` is for using the local app, API, CLI, and graph workflow. `writing-explanatory-reports` supports concise Markdown/HTML reports. `scholar-mode` is for research reasoning.
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -R skills/scholar-mode ~/.codex/skills/
-cp -R skills/sidecar-thinking ~/.codex/skills/
+research-sidecar install-skills
 ```
 
-When the Sidecar app scans a workspace, it also discovers `SKILL.md` files and can load relevant skills into model context.
+The install command copies bundled skills into the current workspace, not into the Codex user-level skill directory. When the Sidecar app scans a workspace, it discovers `SKILL.md` files and can load relevant skills into model context.

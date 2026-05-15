@@ -4,6 +4,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { installBundledSkills, installWorkspaceScaffold } from "../src/lib/workspaceInstall";
 
+const expectedBundledSkills = [
+  "research-graph-sop",
+  "scholar-mode",
+  "sidecar-thinking",
+  "writing-explanatory-reports"
+];
+
 async function makeWorkspace() {
   const root = join(tmpdir(), `sidecar-install-${crypto.randomUUID()}`);
   await mkdir(root, { recursive: true });
@@ -23,6 +30,7 @@ describe("workspace installation", () => {
       const third = await installBundledSkills(root, { force: true });
 
       expect(first.installed).toContain("sidecar-thinking");
+      expect(first.installed.sort()).toEqual(expectedBundledSkills);
       expect(installed).toContain("name: sidecar-thinking");
       expect(second.skipped).toContain("sidecar-thinking");
       expect(preserved).toBe("user edit\n");

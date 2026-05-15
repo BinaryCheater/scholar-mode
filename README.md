@@ -36,6 +36,8 @@ my-research-workspace/
   skills/
     research-graph-sop/
     scholar-mode/
+    sidecar-thinking/
+    writing-explanatory-reports/
   dingyi/
     synthetic/
       graph.yaml
@@ -107,14 +109,20 @@ npm run dev
 For production build validation:
 
 ```bash
-cd sidecar
 npm test
 npm run typecheck
-npm run build
-npm pack --dry-run
+npm run pack:sidecar
 ```
 
-`npm pack --dry-run` verifies that the npm package contains the CLI, compiled server, built client, and bundled skills.
+`npm run pack:sidecar` verifies that the npm package contains the CLI, compiled server, built client, and all bundled skills.
+
+Publish the npm package from the repository root with:
+
+```bash
+npm run publish:sidecar
+```
+
+This publishes the `sidecar/` workspace package, not the private repository wrapper.
 
 ## Documentation
 

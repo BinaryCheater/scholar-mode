@@ -32,6 +32,8 @@ describe("codex sidecar CLI", () => {
     const gitignore = await readFile(join(workspace, ".gitignore"), "utf8");
     const sidecarSkill = await readFile(join(workspace, "skills", "sidecar-thinking", "SKILL.md"), "utf8");
     const scholarSkill = await readFile(join(workspace, "skills", "scholar-mode", "SKILL.md"), "utf8");
+    const graphSkill = await readFile(join(workspace, "skills", "research-graph-sop", "SKILL.md"), "utf8");
+    const reportSkill = await readFile(join(workspace, "skills", "writing-explanatory-reports", "SKILL.md"), "utf8");
 
     expect(stdout).toContain("Research Sidecar workspace installed");
     expect(stdout).toContain(`Workspace: ${workspace}`);
@@ -45,6 +47,8 @@ describe("codex sidecar CLI", () => {
     expect(gitignore).toContain(".side/");
     expect(sidecarSkill).toContain("name: sidecar-thinking");
     expect(scholarSkill).toContain("name: scholar-mode");
+    expect(graphSkill).toContain("name: research-graph-sop");
+    expect(reportSkill).toContain("name: writing-explanatory-reports");
   });
 
   it("does not overwrite existing graph files unless force is used", async () => {

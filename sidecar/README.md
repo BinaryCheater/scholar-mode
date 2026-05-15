@@ -236,7 +236,9 @@ The `prepack` script builds the client and server, then copies bundled skills in
 - `bin/research-sidecar.mjs`
 - `dist/client`
 - `dist-server`
-- `skills`
+- `skills/research-graph-sop`
+- `skills/scholar-mode`
+- `skills/sidecar-thinking`
+- `skills/writing-explanatory-reports`
 - CLI helper scripts
 - README files
-

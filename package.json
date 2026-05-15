@@ -1,0 +1,14 @@
+{
+  "name": "research-sidecar-repo",
+  "private": true,
+  "workspaces": [
+    "sidecar"
+  ],
+  "scripts": {
+    "test": "npm --prefix sidecar test",
+    "typecheck": "npm --prefix sidecar run typecheck",
+    "build": "npm --prefix sidecar run build",
+    "pack:sidecar": "npm --prefix sidecar pack --dry-run",
+    "publish:sidecar": "npm publish --workspace sidecar --access public"
+  }
+}

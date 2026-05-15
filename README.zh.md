@@ -36,6 +36,8 @@ my-research-workspace/
   skills/
     research-graph-sop/
     scholar-mode/
+    sidecar-thinking/
+    writing-explanatory-reports/
   dingyi/
     synthetic/
       graph.yaml
@@ -107,14 +109,20 @@ npm run dev
 验证生产构建和 npm 打包：
 
 ```bash
-cd sidecar
 npm test
 npm run typecheck
-npm run build
-npm pack --dry-run
+npm run pack:sidecar
 ```
 
-`npm pack --dry-run` 用来确认 npm 包里包含 CLI、编译后的 server、构建后的 client 和 bundled skills。
+`npm run pack:sidecar` 用来确认 npm 包里包含 CLI、编译后的 server、构建后的 client 和全部 bundled skills。
+
+从仓库根目录发布 npm 包：
+
+```bash
+npm run publish:sidecar
+```
+
+这个命令发布的是 `sidecar/` workspace package，不是私有的仓库 wrapper。
 
 ## 相关文档
 
