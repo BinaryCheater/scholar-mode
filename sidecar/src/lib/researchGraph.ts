@@ -183,7 +183,7 @@ export function layoutResearchGraph(graph: VisibleResearchGraph, options: { dire
   const nodes = graph.nodes.map((node) => {
     const depth = depthById.get(node.id) ?? 0;
     const offset = rowOffsets.get(node.id) || 0;
-    const spacing = options.mode === "full" ? { depth: 540, cross: 290 } : { depth: 300, cross: 160 };
+    const spacing = options.mode === "full" ? { depth: 610, cross: 320 } : { depth: 300, cross: 160 };
     const position =
       options.direction === "LR" ? { x: depth * spacing.depth, y: offset * spacing.cross } : { x: offset * spacing.depth, y: depth * spacing.cross };
     return { ...node, position };

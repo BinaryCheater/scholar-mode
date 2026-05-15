@@ -85,7 +85,7 @@ const SIDEBAR_WIDTH_KEY = "thinking-sidecar-sidebar-width";
 const SIDEBAR_SPLIT_KEY = "thinking-sidecar-sidebar-split-v2";
 
 function App() {
-  const [activeView, setActiveView] = useState<"chat" | "graph">("chat");
+  const [activeView, setActiveView] = useState<"chat" | "graph">("graph");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceInfo>({ instructionFiles: [], skills: [] });
   const [researchGraph, setResearchGraph] = useState<ResearchGraph | null>(null);
