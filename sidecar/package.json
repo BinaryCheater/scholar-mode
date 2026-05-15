@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx src/server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
-    "start": "node dist-server/index.js",
+    "start": "node dist-server/server/index.js",
     "codex:install": "node scripts/codex-sidecar.mjs install",
     "codex:ask": "node scripts/codex-sidecar.mjs ask",
     "codex:call": "node scripts/codex-sidecar.mjs call",

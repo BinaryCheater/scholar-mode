@@ -52,6 +52,7 @@ edges:
         type: "question",
         file: "research/rq.main.md",
         fileExists: true,
+        files: [{ path: "research/rq.main.md", fileExists: true }],
         status: "active",
         tags: ["framing"]
       },
@@ -60,7 +61,8 @@ edges:
         title: "Reading pass",
         type: "task",
         file: "research/tasks/reading-pass.md",
-        fileExists: false
+        fileExists: false,
+        files: [{ path: "research/tasks/reading-pass.md", fileExists: false }]
       }
     ]);
     expect(graph.edges).toEqual([{ id: "rq.main->task.reading:leads_to", from: "rq.main", to: "task.reading", kind: "leads_to" }]);
@@ -144,6 +146,61 @@ edges:
 
     expect(graph.nodes.map((node) => node.file)).toEqual(["notes/subgraph/main.md", "sources/source.md"]);
     expect(graph.nodes.every((node) => node.fileExists)).toBe(true);
+
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("allows summary-only nodes and nodes linked to multiple documents", async () => {
+    const root = await makeWorkspace();
+    await mkdir(join(root, "research/notes"), { recursive: true });
+    await writeFile(
+      join(root, "research/graph.yaml"),
+      `root: rq.main
+nodes:
+  - id: rq.main
+    title: Main question
+    type: question
+    summary: A one-sentence node that can be expanded later.
+  - id: evidence.bundle
+    title: Evidence bundle
+    type: evidence
+    summary: This node points at more than one document.
+    files:
+      - ./notes/evidence-a.md
+      - path: ./notes/evidence-b.md
+        title: Follow-up evidence
+      - ./notes/missing.md
+edges:
+  - from: rq.main
+    to: evidence.bundle
+    kind: supports
+`,
+      "utf8"
+    );
+    await writeFile(join(root, "research/notes/evidence-a.md"), "# Evidence A\n", "utf8");
+    await writeFile(join(root, "research/notes/evidence-b.md"), "# Evidence B\n", "utf8");
+
+    const graph = await loadResearchGraphManifest(root);
+
+    expect(graph.nodes[0]).toEqual({
+      id: "rq.main",
+      title: "Main question",
+      type: "question",
+      summary: "A one-sentence node that can be expanded later."
+    });
+    expect(graph.nodes[1]).toMatchObject({
+      id: "evidence.bundle",
+      title: "Evidence bundle",
+      type: "evidence",
+      file: "research/notes/evidence-a.md",
+      fileExists: true,
+      files: [
+        { path: "research/notes/evidence-a.md", fileExists: true },
+        { path: "research/notes/evidence-b.md", title: "Follow-up evidence", fileExists: true },
+        { path: "research/notes/missing.md", fileExists: false }
+      ]
+    });
+    expect(graph.warnings).toEqual(["Missing file for node evidence.bundle: research/notes/missing.md"]);
 
     await rm(root, { recursive: true, force: true });
   });

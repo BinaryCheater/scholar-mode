@@ -1085,6 +1085,40 @@ textarea {
   padding: 7px 12px;
 }
 
+.file-preview-links {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid #eef0f3;
+  padding: 8px 12px;
+}
+
+.file-preview-links button {
+  flex: 0 0 auto;
+  max-width: 190px;
+  overflow: hidden;
+  border: 1px solid #d8dee6;
+  border-radius: 6px;
+  background: #fff;
+  color: #4b5563;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-links button.active {
+  border-color: #202123;
+  background: #202123;
+  color: #fff;
+}
+
+.file-preview-links button:disabled {
+  opacity: 0.45;
+}
+
 .file-preview-panel pre {
   margin: 0;
   overflow: auto;

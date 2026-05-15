@@ -2,7 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join } from "node:path";
 import YAML from "yaml";
 import { resolveWorkspacePath, toWorkspaceRelativePath } from "./files.js";
-import type { LayoutDirection, ResearchEdgeKind, ResearchGraph, ResearchGraphEdge, ResearchGraphNode, ResearchNodeType } from "./researchGraph.js";
+import type { LayoutDirection, ResearchEdgeKind, ResearchGraph, ResearchGraphEdge, ResearchGraphNode, ResearchGraphNodeFile, ResearchNodeType } from "./researchGraph.js";
 
 const DEFAULT_MANIFEST_PATH = "research/graph.yaml";
 const NODE_TYPES = new Set<ResearchNodeType>(["question", "claim", "evidence", "method", "concept", "source", "task", "output"]);
@@ -15,6 +15,7 @@ interface ManifestNode {
   title?: unknown;
   type?: unknown;
   file?: unknown;
+  files?: unknown;
   summary?: unknown;
   status?: unknown;
   tags?: unknown;
@@ -32,6 +33,8 @@ interface FrontmatterNode {
   id?: unknown;
   title?: unknown;
   type?: unknown;
+  file?: unknown;
+  files?: unknown;
   summary?: unknown;
   status?: unknown;
   tags?: unknown;
@@ -71,8 +74,12 @@ export async function loadResearchGraphManifest(workspaceRoot: string, manifestP
 
 async function normalizeNode(workspaceRoot: string, manifestDir: string, input: ManifestNode, warnings: string[]): Promise<ResearchGraphNode> {
   const id = requiredString(input.id, "node.id");
-  const file = normalizeManifestLinkedPath(workspaceRoot, manifestDir, optionalString(input.file));
-  const frontmatter = file && isMarkdownPath(file) ? await readNodeFrontmatter(workspaceRoot, file) : {};
+  const linkedFiles = normalizeManifestLinkedFiles(workspaceRoot, manifestDir, input.file, input.files);
+  const primaryFile = linkedFiles[0]?.path;
+  const frontmatter = primaryFile && isMarkdownPath(primaryFile) ? await readNodeFrontmatter(workspaceRoot, primaryFile) : {};
+  const frontmatterFiles = linkedFiles.length ? [] : normalizeManifestLinkedFiles(workspaceRoot, manifestDir, frontmatter.file, frontmatter.files);
+  const files = linkedFiles.length ? linkedFiles : frontmatterFiles;
+  const file = files[0]?.path;
   const frontmatterId = optionalString(frontmatter.id);
   if (frontmatterId && frontmatterId !== id) {
     throw new Error(`Frontmatter id ${frontmatterId} does not match graph node ${id}.`);
@@ -85,16 +92,20 @@ async function normalizeNode(workspaceRoot: string, manifestDir: string, input: 
     title: optionalString(input.title) || optionalString(frontmatter.title) || id,
     type: normalizeNodeType(optionalString(input.type) || optionalString(frontmatter.type), id),
     ...(file ? { file } : {}),
+    ...(files.length ? { files } : {}),
     ...optionalField("summary", optionalString(input.summary) || optionalString(frontmatter.summary)),
     ...optionalStatus(optionalString(input.status) || optionalString(frontmatter.status)),
     ...(manifestTags.length || frontmatterTags.length ? { tags: manifestTags.length ? manifestTags : frontmatterTags } : {})
   };
 
-  if (file) {
-    node.fileExists = await fileExists(workspaceRoot, file);
-    if (!node.fileExists) {
-      warnings.push(`Missing file for node ${id}: ${file}`);
+  if (files.length) {
+    for (const linked of files) {
+      linked.fileExists = await fileExists(workspaceRoot, linked.path);
+      if (!linked.fileExists) {
+        warnings.push(`Missing file for node ${id}: ${linked.path}`);
+      }
     }
+    node.fileExists = files[0].fileExists;
   }
 
   return node;
@@ -150,8 +161,44 @@ function normalizeManifestLinkedPath(workspaceRoot: string, manifestDir: string,
   return toWorkspaceRelativePath(workspaceRoot, resolveWorkspacePath(workspaceRoot, candidate));
 }
 
+function normalizeManifestLinkedFiles(workspaceRoot: string, manifestDir: string, fileValue: unknown, filesValue: unknown): ResearchGraphNodeFile[] {
+  const out: ResearchGraphNodeFile[] = [];
+  const seen = new Set<string>();
+
+  function add(pathValue: unknown, titleValue?: unknown) {
+    const path = normalizeManifestLinkedPath(workspaceRoot, manifestDir, optionalString(pathValue));
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    out.push({
+      path,
+      ...optionalField("title", titleValue)
+    });
+  }
+
+  add(fileValue);
+
+  if (Array.isArray(filesValue)) {
+    for (const item of filesValue) {
+      if (typeof item === "string") {
+        add(item);
+      } else if (item && typeof item === "object" && !Array.isArray(item)) {
+        const record = item as Record<string, unknown>;
+        add(record.path ?? record.file, record.title);
+      }
+    }
+  }
+
+  return out;
+}
+
 function parseYamlRecord(source: string, label: string): Record<string, unknown> {
-  const parsed = YAML.parse(source);
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${label} is not valid YAML: ${message}`);
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`${label} must contain a YAML object.`);
   }
@@ -186,7 +233,7 @@ function normalizeEdgeKind(value: unknown): ResearchEdgeKind {
   return kind as ResearchEdgeKind;
 }
 
-function optionalField<K extends "summary" | "label">(key: K, value: unknown) {
+function optionalField<K extends "summary" | "label" | "title">(key: K, value: unknown) {
   const normalized = optionalString(value);
   return normalized ? { [key]: normalized } : {};
 }

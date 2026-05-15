@@ -80,6 +80,74 @@ Prefer the existing Sidecar vocabulary:
 | `cites` | a node uses a source |
 | `leads_to` | a result creates a task or next step |
 
+## YAML Contract
+
+When creating or editing `graph.yaml`, keep it valid, boring YAML. Use two-space indentation, arrays with `-`, no tabs, and quote strings only when they contain characters that could confuse YAML (`:`, `#`, `{}`, `[]`, leading `*`, or multiline text).
+
+Top-level shape:
+
+```yaml
+root: rq.main
+
+ui:
+  layout: LR
+  expanded: [rq.main]
+
+nodes:
+  - id: rq.main
+    title: Core research question
+    type: question
+    summary: One sentence is enough when no note exists yet.
+    status: active
+    tags: [framing]
+
+edges:
+  - from: rq.main
+    to: claim.001
+    kind: answers
+```
+
+Required:
+
+- `root`: id of an existing node.
+- `nodes`: array of node objects.
+- each node: `id`, `title`, `type`.
+- `edges`: array, empty is fine.
+- each edge: `from`, `to`, `kind`; both ids must exist in `nodes`.
+
+Optional node fields:
+
+- `summary`: use for short, one-sentence nodes that do not need a document yet.
+- `file`: one linked Markdown/HTML/text document.
+- `files`: multiple linked documents. Use either strings or `{ path, title }` objects.
+- `status`: `active`, `draft`, `blocked`, or `done`.
+- `tags`: array of short labels.
+
+Valid document-link patterns:
+
+```yaml
+nodes:
+  - id: claim.short
+    title: Short claim
+    type: claim
+    summary: This node is intentionally just one sentence for now.
+
+  - id: evidence.single
+    title: Single note
+    type: evidence
+    file: ./evidence.md
+
+  - id: source.bundle
+    title: Source bundle
+    type: source
+    files:
+      - ./paper.md
+      - path: ./appendix.html
+        title: Appendix preview
+```
+
+Do not force every node to link to a document. Add `file` or `files` only when the longer note exists or when creating the link improves navigation. Missing linked files are allowed while drafting, but they should be intentional and called out in the change report.
+
 ## Agent Discipline
 
 Act primarily as an active research assistant: propose subquestions, hypotheses, rival explanations, operationalizations, and next tasks.

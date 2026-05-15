@@ -24,6 +24,8 @@ import {
   type LayoutResearchNode,
   type ResearchGraph,
   type ResearchGraphEdge,
+  type ResearchGraphNode,
+  type ResearchGraphNodeFile,
   type ResearchNodeType
 } from "../lib/researchGraph";
 import { MarkdownContent } from "./MarkdownContent";
@@ -46,8 +48,18 @@ const nodeTypes = { research: ResearchNodeCard };
 
 type FilePreviewState =
   | { status: "idle" }
+  | { status: "note"; path: string; title: string; summary?: string }
   | { status: "loading"; path: string; title: string }
-  | { status: "ready"; path: string; title: string; content: string; bytes: number; format: FilePreviewFormat; mimeType: string }
+  | {
+      status: "ready";
+      path: string;
+      title: string;
+      content: string;
+      bytes: number;
+      format: FilePreviewFormat;
+      mimeType: string;
+      links: ResearchGraphNodeFile[];
+    }
   | { status: "error"; path: string; title: string; message: string };
 type PreviewDock = "right" | "bottom";
 type FilePreviewFormat = "markdown" | "html" | "text";
@@ -198,27 +210,41 @@ function ResearchGraphCanvas({
     setCenter(node.position.x + offset, node.position.y + offset, { zoom: mode === "compact" ? 1.55 : 1.08, duration: 280 });
   }
 
-  async function openNodePreview(node: LayoutResearchNode) {
-    if (!node.file) {
-      setPreview({ status: "error", path: node.id, title: node.title, message: "This graph node does not have a file path." });
+  async function openNodePreview(node: Pick<ResearchGraphNode, "id" | "title" | "summary" | "file" | "fileExists" | "files">, preferredPath?: string) {
+    const links = linkedFiles(node);
+    if (!links.length) {
+      setPreview({ status: "note", path: node.id, title: node.title, summary: node.summary });
       return;
     }
 
-    setPreview({ status: "loading", path: node.file, title: node.title });
+    const target = (preferredPath ? links.find((link) => link.path === preferredPath && link.fileExists !== false) : undefined) || links.find((link) => link.fileExists !== false);
+    if (!target) {
+      setPreview({ status: "error", path: node.id, title: node.title, message: "This graph node only links to missing files." });
+      return;
+    }
+
+    setPreview({ status: "loading", path: target.path, title: target.title || node.title });
     try {
-      const snapshot = await api<FilePreviewSnapshot>(`/api/workspace/file?path=${encodeURIComponent(node.file)}`);
+      const snapshot = await api<FilePreviewSnapshot>(`/api/workspace/file?path=${encodeURIComponent(target.path)}`);
       setPreview({
         status: "ready",
         path: snapshot.path,
-        title: node.title,
+        title: target.title || node.title,
         content: snapshot.content,
         bytes: snapshot.bytes,
         format: snapshot.format,
-        mimeType: snapshot.mimeType
+        mimeType: snapshot.mimeType,
+        links
       });
     } catch (error) {
-      setPreview({ status: "error", path: node.file, title: node.title, message: errorText(error) });
+      setPreview({ status: "error", path: target.path, title: target.title || node.title, message: errorText(error) });
     }
+  }
+
+  function openPathFromPreview(path: string) {
+    const node = graph.nodes.find((item) => linkedFiles(item).some((link) => link.path === path));
+    if (node) return openNodePreview(node, path);
+    return undefined;
   }
 
   return (
@@ -265,10 +291,10 @@ function ResearchGraphCanvas({
                   <button className="graph-index-focus" onClick={() => focusNode(node)}>
                     <span className={`node-type type-${node.type}`}>{node.type}</span>
                     <strong>{node.title}</strong>
-                    <small>{node.file || node.id}</small>
+                    <small>{nodeSubtitle(node)}</small>
                   </button>
-                  <button className="graph-index-open" onClick={() => void openNodePreview(node)} disabled={!node.file || node.fileExists === false} title={previewButtonTitle(node)}>
-                    {node.fileExists === false ? "Missing" : "Open"}
+                  <button className="graph-index-open" onClick={() => void openNodePreview(node)} disabled={allLinkedFilesMissing(node)} title={previewButtonTitle(node)}>
+                    {previewButtonLabel(node)}
                   </button>
                 </div>
               ))}
@@ -298,7 +324,7 @@ function ResearchGraphCanvas({
             </ReactFlow>
             <GraphOverview layout={layout} mode={mode} />
           </div>
-          <FilePreviewPanel dock={previewDock} onClose={() => setPreview({ status: "idle" })} onDockChange={setPreviewDock} preview={preview} />
+          <FilePreviewPanel dock={previewDock} onClose={() => setPreview({ status: "idle" })} onDockChange={setPreviewDock} onOpenPath={(path) => void openPathFromPreview(path)} preview={preview} />
         </div>
       </section>
     </main>
@@ -356,13 +382,25 @@ function ResearchNodeCard({ data, selected }: NodeProps<ResearchFlowNode>) {
           {item.status ? ` · ${item.status}` : ""}
         </span>
         {item.summary && <p>{item.summary}</p>}
-        <small>{item.file || item.id}</small>
+        <small>{nodeSubtitle(item)}</small>
       </div>
     </article>
   );
 }
 
-function FilePreviewPanel({ dock, onClose, onDockChange, preview }: { dock: PreviewDock; onClose: () => void; onDockChange: (dock: PreviewDock) => void; preview: FilePreviewState }) {
+function FilePreviewPanel({
+  dock,
+  onClose,
+  onDockChange,
+  onOpenPath,
+  preview
+}: {
+  dock: PreviewDock;
+  onClose: () => void;
+  onDockChange: (dock: PreviewDock) => void;
+  onOpenPath: (path: string) => void;
+  preview: FilePreviewState;
+}) {
   if (preview.status === "idle") return null;
 
   return (
@@ -385,12 +423,26 @@ function FilePreviewPanel({ dock, onClose, onDockChange, preview }: { dock: Prev
         </div>
       </header>
       {preview.status === "loading" && <div className="file-preview-state">Loading file...</div>}
+      {preview.status === "note" && (
+        <div className="file-preview-state">
+          {preview.summary || "This node is currently represented only in graph.yaml. Add file or files later when it needs longer notes."}
+        </div>
+      )}
       {preview.status === "error" && <div className="file-preview-state error">{preview.message}</div>}
       {preview.status === "ready" && (
         <>
           <div className="file-preview-meta">
             {preview.bytes.toLocaleString()} bytes · {preview.mimeType}
           </div>
+          {preview.links.length > 1 && (
+            <div className="file-preview-links" aria-label="Linked documents">
+              {preview.links.map((link) => (
+                <button key={link.path} className={link.path === preview.path ? "active" : ""} disabled={link.fileExists === false} onClick={() => onOpenPath(link.path)} title={link.path}>
+                  {link.title || shortPath(link.path)}
+                </button>
+              ))}
+            </div>
+          )}
           <FilePreviewContent preview={preview} />
         </>
       )}
@@ -437,8 +489,9 @@ function FullNodeContent({ item, highlighted }: { item: LayoutResearchNode; high
       <h3>{item.title}</h3>
       {item.summary && <p>{item.summary}</p>}
       <footer>
-        <span>{item.file || item.id}</span>
-        {item.fileExists === false && <strong>missing file</strong>}
+        <span>{nodeSubtitle(item)}</span>
+        {allLinkedFilesMissing(item) && <strong>missing files</strong>}
+        {linkedFiles(item).length > 1 && <strong>{linkedFiles(item).length} docs</strong>}
         {highlighted && <strong>match</strong>}
       </footer>
     </>
@@ -463,13 +516,44 @@ function defaultExpandedIds(graph: ResearchGraph) {
 }
 
 function nodeClassName(item: LayoutResearchNode, mode: GraphViewMode, extra = "") {
-  return ["research-node", mode, `type-${item.type}`, item.fileExists === false ? "missing-file" : "", extra].filter(Boolean).join(" ");
+  return ["research-node", mode, `type-${item.type}`, allLinkedFilesMissing(item) ? "missing-file" : "", extra].filter(Boolean).join(" ");
 }
 
 function previewButtonTitle(node: LayoutResearchNode) {
-  if (!node.file) return "No file attached";
-  if (node.fileExists === false) return "File is referenced by graph.yaml but does not exist yet";
-  return "Preview file";
+  const links = linkedFiles(node);
+  if (!links.length) return "Show graph.yaml summary";
+  if (allLinkedFilesMissing(node)) return "All linked files are referenced by graph.yaml but do not exist yet";
+  return links.length > 1 ? "Preview linked documents" : "Preview file";
+}
+
+function previewButtonLabel(node: LayoutResearchNode) {
+  const links = linkedFiles(node);
+  if (!links.length) return "Note";
+  if (allLinkedFilesMissing(node)) return "Missing";
+  return links.length > 1 ? "Docs" : "Open";
+}
+
+function linkedFiles(node: Pick<ResearchGraphNode, "file" | "fileExists" | "files">): ResearchGraphNodeFile[] {
+  if (node.files?.length) return node.files;
+  if (node.file) return [{ path: node.file, fileExists: node.fileExists }];
+  return [];
+}
+
+function allLinkedFilesMissing(node: Pick<ResearchGraphNode, "file" | "fileExists" | "files">) {
+  const links = linkedFiles(node);
+  return links.length > 0 && links.every((link) => link.fileExists === false);
+}
+
+function nodeSubtitle(node: Pick<ResearchGraphNode, "id" | "file" | "fileExists" | "files">) {
+  const links = linkedFiles(node);
+  if (!links.length) return node.id;
+  if (links.length === 1) return links[0].path;
+  const existing = links.filter((link) => link.fileExists !== false).length;
+  return `${existing}/${links.length} linked docs`;
+}
+
+function shortPath(path: string) {
+  return path.split("/").pop() || path;
 }
 
 function compactEdgeLabel(edge: ResearchGraphEdge) {

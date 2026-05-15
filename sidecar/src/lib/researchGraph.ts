@@ -16,9 +16,16 @@ export interface ResearchGraphNode {
   type: ResearchNodeType;
   file?: string;
   fileExists?: boolean;
+  files?: ResearchGraphNodeFile[];
   summary?: string;
   status?: "active" | "draft" | "blocked" | "done";
   tags?: string[];
+}
+
+export interface ResearchGraphNodeFile {
+  path: string;
+  title?: string;
+  fileExists?: boolean;
 }
 
 export interface ResearchGraphEdge {
@@ -225,7 +232,7 @@ function groupEdges(edges: ResearchGraphEdge[], key: "from" | "to") {
 }
 
 function searchableNodeText(node: ResearchGraphNode) {
-  return normalize([node.title, node.id, node.type, node.file, node.summary, ...(node.tags || [])].filter(Boolean).join(" "));
+  return normalize([node.title, node.id, node.type, node.file, ...(node.files || []).map((file) => file.path), node.summary, ...(node.tags || [])].filter(Boolean).join(" "));
 }
 
 function normalize(value: string) {
