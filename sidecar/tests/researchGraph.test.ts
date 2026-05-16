@@ -3,6 +3,8 @@ import {
   buildGraphIndex,
   getExpandableDescendantIds,
   getExpandableNodeIds,
+  getFocusedResearchGraph,
+  getNextExpandedIdsForNodeClick,
   getVisibleResearchGraph,
   layoutResearchGraph,
   type ResearchGraph
@@ -94,5 +96,42 @@ describe("research graph view model", () => {
     expect(getExpandableNodeIds(graph)).toEqual(["rq.main", "rq.theory"]);
     expect(getExpandableDescendantIds(graph, "rq.main")).toEqual(["rq.main", "rq.theory"]);
     expect(getExpandableDescendantIds(graph, "rq.method")).toEqual([]);
+  });
+
+  it("builds a compact focus graph from direct parents, children, and incident cross-links", () => {
+    const focused = getFocusedResearchGraph(graph, { focusId: "claim.001", includeAntecedents: false });
+
+    expect(focused.nodes.map((node) => node.id)).toEqual(["rq.theory", "claim.001", "evidence.001"]);
+    expect(focused.edges.map((edge) => edge.id)).toEqual(["e3", "e4"]);
+    expect(focused.rootId).toBe("claim.001");
+  });
+
+  it("adds the root antecedent path only when requested", () => {
+    const focused = getFocusedResearchGraph(graph, { focusId: "claim.001", includeAntecedents: true });
+
+    expect(focused.nodes.map((node) => node.id)).toEqual(["rq.main", "rq.theory", "claim.001", "evidence.001"]);
+    expect(focused.edges.map((edge) => edge.id)).toEqual(["e1", "e3", "e4"]);
+    expect(focused.rootId).toBe("claim.001");
+  });
+
+  it("places direct hierarchy parents before the focused node", () => {
+    const focused = getFocusedResearchGraph(graph, { focusId: "claim.001", includeAntecedents: false });
+    const layout = layoutResearchGraph(focused, { direction: "LR", mode: "compact" });
+    const parent = layout.nodes.find((node) => node.id === "rq.theory");
+    const focus = layout.nodes.find((node) => node.id === "claim.001");
+
+    expect(parent?.position.x).toBeLessThan(focus?.position.x ?? 0);
+  });
+
+  it("click expansion opens only the next layer and clears stale descendant expansion", () => {
+    const next = getNextExpandedIdsForNodeClick(graph, new Set(["claim.001"]), "rq.theory");
+
+    expect([...next].sort()).toEqual(["rq.theory"]);
+  });
+
+  it("click collapse removes the node and its expanded descendants", () => {
+    const next = getNextExpandedIdsForNodeClick(graph, new Set(["rq.main", "rq.theory", "claim.001"]), "rq.main");
+
+    expect([...next]).toEqual([]);
   });
 });

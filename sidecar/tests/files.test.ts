@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readWorkspaceFile, resolveWorkspacePath, resolveWorkspaceRelativeLink } from "../src/lib/files";
+import { getWorkspaceOpenCommand, readWorkspaceFile, readWorkspaceRawFile, resolveWorkspaceFileForOpen, resolveWorkspacePath, resolveWorkspaceRelativeLink } from "../src/lib/files";
 
 describe("workspace file access", () => {
   it("resolves relative paths inside the configured workspace", async () => {
@@ -41,6 +41,41 @@ describe("workspace file access", () => {
 
     expect(snapshot.format).toBe("html");
     expect(snapshot.mimeType).toBe("text/html");
+  });
+
+  it("reads raw workspace assets as binary data with an image mime type", async () => {
+    const root = await makeTempWorkspace();
+    await mkdir(join(root, "assets"), { recursive: true });
+    const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await writeFile(join(root, "assets", "figure.png"), pngHeader);
+
+    const raw = await readWorkspaceRawFile(root, "assets/figure.png");
+
+    expect(raw.path).toBe("assets/figure.png");
+    expect(raw.content.equals(pngHeader)).toBe(true);
+    expect(raw.mimeType).toBe("image/png");
+  });
+
+  it("resolves existing workspace files for OS open commands", async () => {
+    const root = await makeTempWorkspace();
+    await writeFile(join(root, "note.md"), "open me");
+
+    const target = await resolveWorkspaceFileForOpen(root, "note.md");
+
+    expect(target).toEqual({ path: "note.md", fullPath: join(root, "note.md") });
+  });
+
+  it("rejects directories for OS open commands", async () => {
+    const root = await makeTempWorkspace();
+    await mkdir(join(root, "notes"), { recursive: true });
+
+    await expect(resolveWorkspaceFileForOpen(root, "notes")).rejects.toThrow(/not a file/i);
+  });
+
+  it("builds platform-specific OS open commands", () => {
+    expect(getWorkspaceOpenCommand("/tmp/note.md", "darwin")).toEqual({ command: "open", args: ["/tmp/note.md"] });
+    expect(getWorkspaceOpenCommand("/tmp/note.md", "linux")).toEqual({ command: "xdg-open", args: ["/tmp/note.md"] });
+    expect(getWorkspaceOpenCommand("C:\\note.md", "win32")).toEqual({ command: "cmd", args: ["/c", "start", "", "C:\\note.md"] });
   });
 
   it("resolves relative markdown and html links against the current document", () => {

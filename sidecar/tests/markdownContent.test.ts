@@ -20,4 +20,27 @@ describe("MarkdownContent", () => {
     expect(html).toContain("python3 -m demo");
     expect(html).toContain("--flag value");
   });
+
+  it("routes local markdown links to the standalone viewer", () => {
+    const html = renderToStaticMarkup(
+      createElement(MarkdownContent, {
+        basePath: "research/notes/main.md",
+        content: "[Related](./related.md#claim)"
+      })
+    );
+
+    expect(html).toContain('href="/viewer?path=research%2Fnotes%2Frelated.md#claim"');
+  });
+
+  it("routes local images to raw workspace files without folding suffixes into the file path", () => {
+    const html = renderToStaticMarkup(
+      createElement(MarkdownContent, {
+        basePath: "research/notes/main.md",
+        content: "![Diagram](./assets/figure.png?cache=1#v2)"
+      })
+    );
+
+    expect(html).toContain('src="/api/workspace/raw?path=research%2Fnotes%2Fassets%2Ffigure.png&amp;cache=1#v2"');
+    expect(html).not.toContain("figure.png%3Fcache");
+  });
 });

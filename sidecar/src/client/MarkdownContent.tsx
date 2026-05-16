@@ -9,16 +9,16 @@ export function MarkdownContent({ basePath, className = "", content }: { basePat
     <div className={className ? `markdown-body ${className}` : "markdown-body"}>
       <ReactMarkdown
         components={{
-          a({ href, children, ...props }) {
-            const resolved = href && basePath ? rawWorkspaceUrl(resolveDocumentLink(basePath, href)) : null;
+          a({ href, children, node: _node, ...props }) {
+            const resolved = href && basePath ? workspaceDocumentUrl(resolveDocumentLink(basePath, href)) : null;
             return (
               <a href={resolved || href} {...props}>
                 {children}
               </a>
             );
           },
-          img({ src, ...props }) {
-            const resolved = src && basePath ? rawWorkspaceUrl(resolveDocumentLink(basePath, src)) : null;
+          img({ src, node: _node, ...props }) {
+            const resolved = src && basePath ? workspaceRawUrl(resolveDocumentLink(basePath, src)) : null;
             return <img src={resolved || src} {...props} />;
           }
         }}
@@ -56,8 +56,17 @@ export function resolveDocumentLink(basePath: string, href: string) {
   return normalized.length ? `${normalized.join("/")}${suffix}` : null;
 }
 
-function rawWorkspaceUrl(path: string | null) {
-  return path ? `/api/workspace/raw?path=${encodeURIComponent(path)}` : null;
+function workspaceDocumentUrl(path: string | null) {
+  if (!path) return null;
+  const [pathPart, suffix] = splitResolvedPath(path);
+  return `/viewer?path=${encodeURIComponent(pathPart)}${suffix}`;
+}
+
+function workspaceRawUrl(path: string | null) {
+  if (!path) return null;
+  const [pathPart, suffix] = splitResolvedPath(path);
+  const querySafeSuffix = suffix.startsWith("?") ? `&${suffix.slice(1)}` : suffix;
+  return `/api/workspace/raw?path=${encodeURIComponent(pathPart)}${querySafeSuffix}`;
 }
 
 function firstSuffixIndex(value: string) {
@@ -65,4 +74,10 @@ function firstSuffixIndex(value: string) {
   const query = value.indexOf("?");
   const candidates = [hash, query].filter((index) => index >= 0);
   return candidates.length ? Math.min(...candidates) : -1;
+}
+
+function splitResolvedPath(path: string): [string, string] {
+  const suffixIndex = firstSuffixIndex(path);
+  if (suffixIndex < 0) return [path, ""];
+  return [path.slice(0, suffixIndex), path.slice(suffixIndex)];
 }

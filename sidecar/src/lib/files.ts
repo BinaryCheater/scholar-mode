@@ -91,6 +91,48 @@ export async function readWorkspaceFile(workspaceRoot: string, requestedPath: st
   };
 }
 
+export async function readWorkspaceRawFile(workspaceRoot: string, requestedPath: string): Promise<{ path: string; content: Buffer; bytes: number; mimeType: string }> {
+  const fullPath = resolveWorkspacePath(workspaceRoot, requestedPath);
+  const info = await stat(fullPath);
+
+  if (!info.isFile()) {
+    throw new Error("Requested path is not a file.");
+  }
+
+  const content = await readFile(fullPath);
+
+  return {
+    path: requestedPath,
+    content,
+    bytes: content.byteLength,
+    mimeType: detectRawMimeType(requestedPath)
+  };
+}
+
+export async function resolveWorkspaceFileForOpen(workspaceRoot: string, requestedPath: string) {
+  const fullPath = resolveWorkspacePath(workspaceRoot, requestedPath);
+  const info = await stat(fullPath);
+
+  if (!info.isFile()) {
+    throw new Error("Requested path is not a file.");
+  }
+
+  return {
+    path: requestedPath,
+    fullPath
+  };
+}
+
+export function getWorkspaceOpenCommand(fullPath: string, platform: NodeJS.Platform = process.platform) {
+  if (platform === "darwin") {
+    return { command: "open", args: [fullPath] };
+  }
+  if (platform === "win32") {
+    return { command: "cmd", args: ["/c", "start", "", fullPath] };
+  }
+  return { command: "xdg-open", args: [fullPath] };
+}
+
 export async function writeWorkspaceFile(workspaceRoot: string, requestedPath: string, content: string, allowedExtensions: string[]) {
   assertWritableWorkspacePath(requestedPath, allowedExtensions);
   const fullPath = resolveWorkspacePath(workspaceRoot, requestedPath);
@@ -111,6 +153,44 @@ export function detectFilePreviewFormat(path: string): Pick<FileSnapshot, "forma
     return { format: "html", mimeType: "text/html" };
   }
   return { format: "text", mimeType: "text/plain" };
+}
+
+function detectRawMimeType(path: string) {
+  const extension = extname(path).toLowerCase();
+  switch (extension) {
+    case ".apng":
+      return "image/apng";
+    case ".avif":
+      return "image/avif";
+    case ".gif":
+      return "image/gif";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
+    case ".webp":
+      return "image/webp";
+    case ".html":
+    case ".htm":
+      return "text/html; charset=utf-8";
+    case ".md":
+    case ".markdown":
+      return "text/markdown; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".js":
+    case ".mjs":
+      return "text/javascript; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".pdf":
+      return "application/pdf";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 function assertWritableWorkspacePath(path: string, allowedExtensions: string[]) {

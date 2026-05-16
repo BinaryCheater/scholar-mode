@@ -1,98 +1,24 @@
-import { type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { groupToolMessages, type ToolExchange, type ToolRun } from "./toolMessages";
+import {
+  api,
+  errorText,
+  type AppConfig,
+  type GraphManifestCandidate,
+  type SessionMessage,
+  type SessionSummary,
+  type SidecarSession,
+  type WorkspaceInfo
+} from "./api";
+import { ToolRunMessage, messageLabel, skillRoutingMessage } from "./chat/ToolMessages";
+import { groupToolMessages } from "./toolMessages";
 import { MarkdownContent } from "./MarkdownContent";
+import { GraphSidebarHeader } from "./graph/GraphSidebarHeader";
 import { ResearchGraphView } from "./ResearchGraphView";
-import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, clampSidebarSplit, clampSidebarWidth } from "../lib/sidebarLayout";
+import { SidebarResizeHandle, SidebarSectionResizeHandle, SIDEBAR_SPLIT_KEY, SIDEBAR_WIDTH_KEY, readStoredSidebarSplit, readStoredSidebarWidth } from "./shell/SidebarResizeHandles";
+import { StandaloneFileViewer } from "./viewer/StandaloneFileViewer";
 import type { ResearchGraph } from "../lib/researchGraph";
 import "./styles.css";
-
-type ApiMode = "responses" | "chat";
-
-interface FileSnapshot {
-  id: string;
-  path: string;
-  content: string;
-  bytes: number;
-  format: "markdown" | "html" | "text";
-  mimeType: string;
-  addedAt: string;
-}
-
-interface SessionMessage {
-  id: string;
-  role: "user" | "assistant" | "system" | "tool";
-  content: string;
-  createdAt: string;
-  source: "manual" | "model" | "system";
-  model?: string;
-  apiMode?: ApiMode;
-  toolName?: string;
-}
-
-interface SidecarSession {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  manualContext: string;
-  reviewPrompt: string;
-  model: string;
-  apiMode: ApiMode;
-  files: FileSnapshot[];
-  messages: SessionMessage[];
-}
-
-interface SessionSummary {
-  id: string;
-  title: string;
-  updatedAt: string;
-  model: string;
-  apiMode: ApiMode;
-  messageCount: number;
-  fileCount: number;
-}
-
-interface AppConfig {
-  workspaceRoot: string;
-  graphManifestPath: string;
-  defaultModel: string;
-  openaiBaseURL: string | null;
-  apiMode: ApiMode;
-  hasOpenAIKey: boolean;
-}
-
-interface WorkspaceSkill {
-  name: string;
-  description: string;
-  path: string;
-}
-
-interface WorkspaceSkillTrigger {
-  skill: WorkspaceSkill;
-  score: number;
-  confidence: "high" | "medium";
-  reason: string;
-  disclosure: "loaded" | "candidate";
-}
-
-interface WorkspaceInfo {
-  instructionFiles: Array<{ path: string; bytes: number }>;
-  skills: WorkspaceSkill[];
-}
-
-interface GraphManifestCandidate {
-  path: string;
-  selected: boolean;
-  rootId?: string;
-  title?: string;
-  nodeCount?: number;
-  edgeCount?: number;
-  error?: string;
-}
-
-const SIDEBAR_WIDTH_KEY = "thinking-sidecar-sidebar-width";
-const SIDEBAR_SPLIT_KEY = "thinking-sidecar-sidebar-split-v2";
 
 function App() {
   const [activeView, setActiveView] = useState<"chat" | "graph">("graph");
@@ -461,56 +387,22 @@ function App() {
   );
   const selectedGraphCandidate = graphCandidates.find((candidate) => candidate.path === selectedGraphPath);
   const graphSidebarHeader = (
-    <div className="workspace-sidebar-header">
-      {viewTabs}
-      <div className="brand-row">
-        <div className="workspace-sidebar-title">
-          <h1>Research Graph</h1>
-          {!sidebarCollapsed && <p>{config?.workspaceRoot || "Loading workspace..."}</p>}
-        </div>
-        <div className="brand-actions">
-          <button className="icon-button" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} title="Toggle sidebar">
-            {sidebarCollapsed ? "›" : "‹"}
-          </button>
-        </div>
-      </div>
-      {!sidebarCollapsed && (
-        <div className="graph-config">
-          <label>
-            Graph
-            <select value={selectedGraphPath} onChange={(event) => setSelectedGraphPath(event.target.value)} disabled={!graphCandidates.length}>
-              {graphCandidates.length ? (
-                graphCandidates.map((candidate) => (
-                  <option key={candidate.path} value={candidate.path}>
-                    {candidate.title ? `${candidate.title} · ${candidate.path}` : candidate.path}
-                  </option>
-                ))
-              ) : (
-                <option value="">No graph found</option>
-              )}
-            </select>
-          </label>
-          {selectedGraphCandidate?.error && <small className="graph-config-error">{selectedGraphCandidate.error}</small>}
-          {selectedGraphCandidate && !selectedGraphCandidate.error && (
-            <small>
-              {selectedGraphCandidate.nodeCount ?? 0} nodes · {selectedGraphCandidate.edgeCount ?? 0} edges
-            </small>
-          )}
-          <div className="graph-config-actions">
-            <button className="secondary-button compact" onClick={() => void loadGraphCandidates()}>
-              Refresh
-            </button>
-            <button className="secondary-button compact" onClick={() => void installWorkspaceSkills()} disabled={skillsInstalling}>
-              {skillsInstalling ? "Installing" : "Install skills"}
-            </button>
-            <button className="secondary-button compact primary" onClick={() => void saveGraphSelection()} disabled={!selectedGraphPath || selectedGraphPath === config?.graphManifestPath || graphSaving}>
-              {graphSaving ? "Saving" : "Save graph"}
-            </button>
-          </div>
-          {notice && <small className="graph-config-notice">{notice}</small>}
-        </div>
-      )}
-    </div>
+    <GraphSidebarHeader
+      candidates={graphCandidates}
+      config={config}
+      graphSaving={graphSaving}
+      installWorkspaceSkills={() => void installWorkspaceSkills()}
+      loadGraphCandidates={() => void loadGraphCandidates()}
+      notice={notice}
+      saveGraphSelection={() => void saveGraphSelection()}
+      selectedCandidate={selectedGraphCandidate}
+      selectedGraphPath={selectedGraphPath}
+      setSelectedGraphPath={setSelectedGraphPath}
+      setSidebarCollapsed={setSidebarCollapsed}
+      sidebarCollapsed={sidebarCollapsed}
+      skillsInstalling={skillsInstalling}
+      viewTabs={viewTabs}
+    />
   );
 
   if (activeView === "graph") {
@@ -713,219 +605,11 @@ function App() {
   );
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {})
-    }
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || response.statusText);
+function Root() {
+  if (window.location.pathname === "/viewer") {
+    return <StandaloneFileViewer />;
   }
-  return response.json() as Promise<T>;
+  return <App />;
 }
 
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown error.";
-}
-
-function messageLabel(item: SessionMessage) {
-  if (item.role === "assistant") return "Sidecar";
-  if (item.role === "tool") return item.toolName ? `Tool · ${item.toolName}` : "Tool";
-  if (item.role === "system") return "System";
-  return "You";
-}
-
-function ToolRunMessage({ run }: { run: ToolRun<SessionMessage> }) {
-  const completed = run.exchanges.filter((exchange) => exchange.result).length;
-  return (
-    <article className="message tool">
-      <details className="tool-run-card">
-        <summary>
-          <span className="tool-summary-main">
-            <span className="tool-chip result">Tools</span>
-            <strong>Workspace tools</strong>
-            <small>
-              {run.exchanges.length} call{run.exchanges.length === 1 ? "" : "s"}
-              {completed > 0 ? ` · ${completed} result${completed === 1 ? "" : "s"}` : ""}
-            </small>
-          </span>
-          <span className="tool-summary-action">Details</span>
-        </summary>
-        <div className="tool-run-details">
-          {run.exchanges.map((exchange) => (
-            <ToolExchangeMessage key={exchange.id} exchange={exchange} />
-          ))}
-        </div>
-      </details>
-    </article>
-  );
-}
-
-function ToolExchangeMessage({ exchange }: { exchange: ToolExchange<SessionMessage> }) {
-  return (
-    <details className="tool-card">
-      <summary>
-        <span className="tool-summary-main">
-          <span className={exchange.result ? "tool-chip result" : "tool-chip"}>{exchange.result ? "Done" : "Call"}</span>
-          <strong>{exchange.name}</strong>
-        </span>
-        <span className="tool-summary-action">Details</span>
-      </summary>
-      <div className="message-body tool-details">
-        {exchange.call && (
-          <section className="tool-detail-section">
-            <h3>Call</h3>
-            <MarkdownContent content={exchange.call.content} />
-          </section>
-        )}
-        {exchange.result && (
-          <section className="tool-detail-section">
-            <h3>Result</h3>
-            <MarkdownContent content={exchange.result.content} />
-          </section>
-        )}
-      </div>
-    </details>
-  );
-}
-
-function skillRoutingMessage(payload: { triggers?: WorkspaceSkillTrigger[]; skills?: WorkspaceSkill[]; loadedSkills?: Array<{ path: string; bytes: number }> }) {
-  if (payload.triggers?.length) {
-    const loaded = new Set((payload.loadedSkills || []).map((skill) => skill.path));
-    return `Workspace skill routing:\n\n${payload.triggers
-      .map((trigger) => {
-        const state = loaded.has(trigger.skill.path) ? "loaded" : trigger.disclosure;
-        return `- \`${trigger.skill.name}\` — ${trigger.confidence}; ${state}; ${trigger.reason}`;
-      })
-      .join("\n")}`;
-  }
-  return `Triggered workspace skills:\n\n${(payload.skills || []).map((skill) => `- \`${skill.name}\` — ${skill.description || skill.path}`).join("\n")}`;
-}
-
-function SidebarResizeHandle({ collapsed, onResize, value }: { collapsed: boolean; onResize: (width: number) => void; value: number }) {
-  if (collapsed) return null;
-
-  function resizeTo(width: number) {
-    onResize(clampSidebarWidth(width, window.innerWidth));
-  }
-
-  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    document.body.classList.add("sidebar-resizing");
-
-    function handlePointerMove(moveEvent: PointerEvent) {
-      resizeTo(moveEvent.clientX);
-    }
-
-    function handlePointerUp() {
-      document.body.classList.remove("sidebar-resizing");
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      resizeTo(value - (event.shiftKey ? 40 : 12));
-    }
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      resizeTo(value + (event.shiftKey ? 40 : 12));
-    }
-  }
-
-  return (
-    <div
-      aria-label="Resize sidebar"
-      aria-orientation="vertical"
-      aria-valuemax={MAX_SIDEBAR_WIDTH}
-      aria-valuemin={MIN_SIDEBAR_WIDTH}
-      aria-valuenow={value}
-      className="sidebar-resize-handle"
-      onKeyDown={handleKeyDown}
-      onPointerDown={handlePointerDown}
-      role="separator"
-      tabIndex={0}
-      title="Resize sidebar"
-    />
-  );
-}
-
-function SidebarSectionResizeHandle({ containerRef, onResize, value }: { containerRef: RefObject<HTMLDivElement | null>; onResize: (split: number) => void; value: number }) {
-  function resizeTo(clientY: number) {
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    if (rect.height <= 0) return;
-    onResize(clampSidebarSplit(((clientY - rect.top) / rect.height) * 100));
-  }
-
-  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    document.body.classList.add("sidebar-split-resizing");
-
-    function handlePointerMove(moveEvent: PointerEvent) {
-      resizeTo(moveEvent.clientY);
-    }
-
-    function handlePointerUp() {
-      document.body.classList.remove("sidebar-split-resizing");
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      onResize(clampSidebarSplit(value - (event.shiftKey ? 10 : 4)));
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      onResize(clampSidebarSplit(value + (event.shiftKey ? 10 : 4)));
-    }
-  }
-
-  return (
-    <div
-      aria-label="Resize session and settings areas"
-      aria-orientation="horizontal"
-      aria-valuemax={76}
-      aria-valuemin={24}
-      aria-valuenow={value}
-      className="sidebar-section-resize-handle"
-      onKeyDown={handleKeyDown}
-      onPointerDown={handlePointerDown}
-      role="separator"
-      tabIndex={0}
-      title="Resize session and settings areas"
-    />
-  );
-}
-
-function readStoredSidebarWidth() {
-  const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-  return clampSidebarWidth(stored === null ? undefined : Number(stored), window.innerWidth);
-}
-
-function readStoredSidebarSplit() {
-  const stored = localStorage.getItem(SIDEBAR_SPLIT_KEY);
-  return clampSidebarSplit(stored === null ? undefined : Number(stored));
-}
-
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(<Root />);

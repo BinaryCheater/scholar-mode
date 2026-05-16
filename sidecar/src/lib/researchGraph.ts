@@ -152,9 +152,64 @@ export function getExpandableDescendantIds(graph: ResearchGraph, rootId: string)
   return result;
 }
 
+export function getNextExpandedIdsForNodeClick(graph: ResearchGraph, currentIds: Set<string>, nodeId: string) {
+  const next = new Set(currentIds);
+  const descendantIds = getHierarchyDescendantIds(graph, nodeId);
+
+  if (next.has(nodeId)) {
+    next.delete(nodeId);
+    for (const descendantId of descendantIds) {
+      next.delete(descendantId);
+    }
+    return next;
+  }
+
+  next.add(nodeId);
+  for (const descendantId of descendantIds) {
+    next.delete(descendantId);
+  }
+  return next;
+}
+
+export function getFocusedResearchGraph(graph: ResearchGraph, options: { focusId: string; includeAntecedents?: boolean }): VisibleResearchGraph {
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+  const focus = byId.get(options.focusId);
+  if (!focus) {
+    return { rootId: graph.rootId, nodes: [], edges: [], childCounts: {} };
+  }
+
+  const hierarchyEdges = graph.edges.filter((edge) => hierarchyEdgeKinds.has(edge.kind));
+  const childrenByParent = groupEdges(hierarchyEdges, "from");
+  const parentsByChild = groupEdges(hierarchyEdges, "to");
+  const childCounts = Object.fromEntries(graph.nodes.map((node) => [node.id, childrenByParent.get(node.id)?.length || 0]));
+  const visibleIds = new Set<string>([options.focusId]);
+
+  for (const edge of graph.edges) {
+    if (edge.from === options.focusId) visibleIds.add(edge.to);
+    if (edge.to === options.focusId) visibleIds.add(edge.from);
+  }
+
+  if (options.includeAntecedents) {
+    for (const ancestorId of getAncestorIds(options.focusId, parentsByChild)) {
+      visibleIds.add(ancestorId);
+    }
+  }
+
+  const nodes = graph.nodes.filter((node) => visibleIds.has(node.id));
+  const edges = graph.edges.filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to));
+
+  return {
+    rootId: focus.id,
+    nodes,
+    edges,
+    childCounts
+  };
+}
+
 export function layoutResearchGraph(graph: VisibleResearchGraph, options: { direction: LayoutDirection; mode?: GraphViewMode }): LayoutResearchGraph {
   const hierarchyEdges = graph.edges.filter((edge) => hierarchyEdgeKinds.has(edge.kind));
   const childrenByParent = groupEdges(hierarchyEdges, "from");
+  const parentsByChild = groupEdges(hierarchyEdges, "to");
   const depthById = new Map<string, number>([[graph.rootId, 0]]);
   const queue = [graph.rootId];
 
@@ -165,6 +220,17 @@ export function layoutResearchGraph(graph: VisibleResearchGraph, options: { dire
       if (depthById.has(edge.to)) continue;
       depthById.set(edge.to, parentDepth + 1);
       queue.push(edge.to);
+    }
+  }
+
+  const parentQueue = [graph.rootId];
+  for (let index = 0; index < parentQueue.length; index += 1) {
+    const childId = parentQueue[index];
+    const childDepth = depthById.get(childId) || 0;
+    for (const edge of parentsByChild.get(childId) || []) {
+      if (depthById.has(edge.from)) continue;
+      depthById.set(edge.from, childDepth - 1);
+      parentQueue.push(edge.from);
     }
   }
 
@@ -204,6 +270,25 @@ function collectExpandedTree(id: string, childrenByParent: Map<string, ResearchG
   for (const edge of childrenByParent.get(id) || []) {
     collectExpandedTree(edge.to, childrenByParent, expandedIds, visibleIds);
   }
+}
+
+function getHierarchyDescendantIds(graph: ResearchGraph, rootId: string) {
+  const hierarchyEdges = graph.edges.filter((edge) => hierarchyEdgeKinds.has(edge.kind));
+  const childrenByParent = groupEdges(hierarchyEdges, "from");
+  const result: string[] = [];
+  const queue = [rootId];
+  const seen = new Set<string>([rootId]);
+
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const edge of childrenByParent.get(queue[index]) || []) {
+      if (seen.has(edge.to)) continue;
+      seen.add(edge.to);
+      result.push(edge.to);
+      queue.push(edge.to);
+    }
+  }
+
+  return result;
 }
 
 function getAncestorIds(id: string, parentsByChild: Map<string, ResearchGraphEdge[]>) {

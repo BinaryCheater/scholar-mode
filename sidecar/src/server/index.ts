@@ -1,8 +1,9 @@
 import express from "express";
+import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildContextPacket } from "../lib/context.js";
-import { readWorkspaceFile } from "../lib/files.js";
+import { getWorkspaceOpenCommand, readWorkspaceFile, readWorkspaceRawFile, resolveWorkspaceFileForOpen } from "../lib/files.js";
 import { discoverGraphManifests } from "../lib/graphDiscovery.js";
 import { DEFAULT_REVIEW_PROMPT } from "../lib/prompt.js";
 import { loadResearchGraphManifest } from "../lib/researchGraphManifest.js";
@@ -79,7 +80,7 @@ app.get("/api/workspace/file", async (req, res, next) => {
 app.get("/api/workspace/raw", async (req, res, next) => {
   try {
     const path = String(req.query.path || "");
-    const snapshot = await readWorkspaceFile(config.workspaceRoot, path);
+    const snapshot = await readWorkspaceRawFile(config.workspaceRoot, path);
     res.type(snapshot.mimeType).send(snapshot.content);
   } catch (error) {
     next(error);
@@ -89,8 +90,21 @@ app.get("/api/workspace/raw", async (req, res, next) => {
 app.get(/^\/api\/workspace\/raw-path\/(.+)$/, async (req, res, next) => {
   try {
     const path = decodeURIComponent(String(req.params[0] || ""));
-    const snapshot = await readWorkspaceFile(config.workspaceRoot, path);
+    const snapshot = await readWorkspaceRawFile(config.workspaceRoot, path);
     res.type(snapshot.mimeType).send(snapshot.content);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/workspace/open", async (req, res, next) => {
+  try {
+    const target = await resolveWorkspaceFileForOpen(config.workspaceRoot, String(req.body?.path || ""));
+    const { command, args } = getWorkspaceOpenCommand(target.fullPath);
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    child.on("error", () => undefined);
+    child.unref();
+    res.json({ opened: true, path: target.path });
   } catch (error) {
     next(error);
   }
